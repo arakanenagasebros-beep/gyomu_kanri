@@ -1478,8 +1478,6 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           const lastDate=t.vpEditHistory[t.vpEditHistory.length-1].date;
           if(lastDate!==today||todayEdits>=2){if(!confirm("本当に再編集しますか？"))return;}}
 catch(e){showModal({title:"通信エラー",sub:"合言葉確認に失敗しました。",big:"📡"});return}
-
-        }
         t.validPointCount=n;t.vpEditHistory.push({date:today,value:n});saveData(data);
         if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList();
       });
