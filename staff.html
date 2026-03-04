@@ -931,6 +931,7 @@ tabNav("tabRM","tabSM","tabTL","tabDD","tabMC");tabNav("tabRM2","tabSM2","tabTL2
 
 /* === STAMP SCREEN === */
 function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+u.stamps = u.stamps || {};
 const now=new Date(),total=countTotal(u),stamped=!!u.stamps[ymd(now)];
 $("stampUserName").textContent=u.name||u.id;$("stampDate").textContent=`${now.getMonth()+1}月${now.getDate()}日（${dowJa(now)}）`;
 renderRankBadge($("stampRankBadge"),total);renderProgress($("stampRankInfo"),total);
@@ -975,6 +976,7 @@ let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
 function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+u.stamps = u.stamps || {};
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
