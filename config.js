@@ -2,5 +2,5 @@
 // ※GitHub Pages 等で公開する場合、ここに書いたURLは閲覧可能になります。
 //   Apps Script 側の公開範囲/トークン等で保護してください。
 window.APP_CONFIG = {
-  DEFAULT_API_URL: "https://script.google.com/macros/s/AKfycbwcOod8nvWKWUEkg97ZgwP3kxDHdhZGpRqEjRMnIXF7XG004s2IiovbfqpJnU58Tk0apg/exec"
+  DEFAULT_API_URL: "https://script.google.com/macros/s/AKfycbyNPPaP5kPK2DPkwoqAw_7wgWOCZB8QEdpb3fVwbkbmnpgq5LaN_Le83NTSdLNNjmx9yg/exec"
 };
