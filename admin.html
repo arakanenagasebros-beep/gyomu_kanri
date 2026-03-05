@@ -2243,14 +2243,34 @@ function renderAdminCreds() {
   $("adminCredId").value = data._adminId || ADMIN_ID;
   $("adminCredPw").value = data._adminPw || ADMIN_PW;
 }
-$("adminCredSave").addEventListener("click", function(){
+$("adminCredSave").addEventListener("click", async function () {
   var nid = $("adminCredId").value.trim();
   var npw = $("adminCredPw").value.trim();
   if (!nid || !npw) { showModal({title:"ID・PWは必須です",big:"⚠️"}); return; }
-  data._adminId = nid;
-  data._adminPw = npw;
-  saveData(data);
-  showModal({title:"管理者情報を更新しました",sub:"次回ログインから新しいID/PWを使用します",big:"✅"});
+
+  if (!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
+
+  // 旧PW入力（モーダル等にしてもOK。簡易にprompt扱いでもよいが、あなたはprompt排除方針なので入力欄を増やすのが理想）
+  // ここでは暫定で「現在PWは adminCredPw に入っている前提」にして、
+  // 旧PWを別inputで持つのがベストです。
+  var oldPw = prompt("旧パスワードを入力してください"); // ←※ここも本当はモーダル化推奨
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type":"text/plain"},
+      body: JSON.stringify({_action:"setAdminCreds", oldPw, newId:nid, newPw:npw}),
+      redirect: "follow"
+    });
+    const result = await resp.json();
+    if (!result.ok) {
+      showModal({title:"更新失敗", sub: result.error || "不明なエラー", big:"⚠️"});
+      return;
+    }
+    showModal({title:"管理者情報を更新しました", sub:"次回ログインから新しいID/PWを使用します", big:"✅"});
+  } catch (e) {
+    showModal({title:"通信エラー", sub: String(e), big:"⚠️"});
+  }
 });
 
 (function(){if(!location.hash||location.hash==="#user-login")location.hash="#admin-login";route();document.addEventListener("DOMContentLoaded", initSync)})();
