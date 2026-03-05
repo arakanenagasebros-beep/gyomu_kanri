@@ -584,6 +584,40 @@ if (!localStorage.getItem(API_URL_KEY) && DEFAULT_API_URL) localStorage.setItem(
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
 function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); }
+
+async function fetchTodayPasswordForAdmin(){
+  if(!API_URL) return null;
+  const t=getToken();
+  if(!t) return null;
+  const resp = await fetch(API_URL, {
+    method:"POST",
+    headers:{ "Content-Type":"text/plain" },
+    body: JSON.stringify({_action:"getTodayPassword", token:t}),
+    redirect:"follow"
+  });
+  const r = await resp.json();
+  if(!r || !r.ok) return null;
+  return r.password || null;
+}
+
+async function downloadDriveFile(fileId, fileName){
+  if(!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
+  const t=getToken();
+  if(!t){ showModal({title:"未ログインです",big:"⚠️"}); return; }
+  const url = API_URL + "?action=download&token=" + encodeURIComponent(t) + "&fileId=" + encodeURIComponent(fileId);
+  const resp = await fetch(url, { redirect:"follow" });
+  const r = await resp.json();
+  if(!r.ok){ showModal({title:"ダウンロード失敗",sub:(r.error||"unknown"),big:"⚠️"}); return; }
+  const bin = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
+  const blob = new Blob([bin], {type: r.mimeType || "application/octet-stream"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (fileName || r.name || "download");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
 function clearToken(){ sessionStorage.removeItem(TOKEN_KEY); }
 
 let _syncVersion = 0;
@@ -1619,7 +1653,15 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}))});
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+            }
+          });
           wrap.appendChild(dlBtn);
         }
         const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
@@ -1631,7 +1673,15 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const span=document.createElement("span");span.style.fontSize="10px";span.style.color="var(--mint)";span.textContent="✅ 完了";wrap.appendChild(span);
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}))});
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+            }
+          });
           wrap.appendChild(dlBtn);
         }
         const revertBtn=document.createElement("button");revertBtn.className="btn danger small";revertBtn.textContent="↩ 依頼中に戻す";
