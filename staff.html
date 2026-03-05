@@ -465,26 +465,45 @@ td.editing textarea{min-height:40px;resize:vertical;}
 const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
 
 /* ================================================================ */
+/* ================================================================ */
 /* === GOOGLE DRIVE API SYNC LAYER === */
 /* ================================================================ */
 const API_URL_KEY = "stampcard_api_url";
 const DEFAULT_API_URL = window.APP_CONFIG?.DEFAULT_API_URL || "";
-// config.js に値があればそれを使い、なければブラウザの記憶を使う
+// config.js の値を常に優先する
 let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
-localStorage.setItem(API_URL_KEY, API_URL); // 常に最新のURLで記憶を上書きする
+localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
 function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); }
 function clearToken(){ sessionStorage.removeItem(TOKEN_KEY); }
 
+async function downloadDriveFile(fileId, fileName){
+  if(!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
+  const t=getToken();
+  if(!t){ showModal({title:"未ログインです",big:"⚠️"}); return; }
+  const url = API_URL + "?action=download&token=" + encodeURIComponent(t) + "&fileId=" + encodeURIComponent(fileId);
+  const resp = await fetch(url, { redirect:"follow" });
+  const r = await resp.json();
+  if(!r.ok){ showModal({title:"ダウンロード失敗",sub:(r.error||"unknown"),big:"⚠️"}); return; }
+  const bin = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
+  const blob = new Blob([bin], {type: r.mimeType || "application/octet-stream"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (fileName || r.name || "download");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+
 let _syncVersion = 0;
 let _syncTimer = null;
 let _isSyncing = false;
 let _lastSyncTime = null;
-const POLL_INTERVAL = 4000; // 4秒ポーリング
+const POLL_INTERVAL = 4000;
 
-// Sync status UI
 function updateSyncUI(status, msg) {
   const dot = document.getElementById("syncDot");
   const msgEl = document.getElementById("syncMsg");
@@ -497,70 +516,6 @@ function updateSyncUI(status, msg) {
   }
 }
 
-// API URL setup - modal based
-function promptApiUrl() {
-  var ov = document.getElementById("apiSetupOverlay");
-  var inp = document.getElementById("apiUrlInput");
-  var st = document.getElementById("apiSetupStatus");
-  if (!ov) return;
-  inp.value = API_URL || "";
-  st.textContent = API_URL ? "接続中" : "未設定";
-  st.style.color = API_URL ? "#6bcb77" : "var(--muted)";
-  ov.style.display = "block";
-}
-function setupApiModal() {
-  var ov = document.getElementById("apiSetupOverlay");
-  if (!ov) return;
-
-  // Close
-  document.getElementById("apiSetupClose").addEventListener("click", function(){ ov.style.display="none"; });
-  ov.addEventListener("click", function(e){ if(e.target===ov) ov.style.display="none"; });
-
-  // Save + ping
-  document.getElementById("apiSetupSave").addEventListener("click", async function(){
-    var inp = document.getElementById("apiUrlInput");
-    var st  = document.getElementById("apiSetupStatus");
-    var url = (inp.value || "").trim();
-
-    if (!url) {
-      st.textContent = "URLを入力してください";
-      st.style.color = "#ff4757";
-      return;
-    }
-
-    API_URL = url;
-    localStorage.setItem(API_URL_KEY, API_URL);
-
-    st.textContent = "接続テスト中...";
-    st.style.color = "#4d96ff";
-    updateSyncUI("loading", "接続テスト中...");
-
-    var ok = await testApiConnection(); // ?action=ping
-    if (!ok) {
-      st.textContent = "接続できません（URL/デプロイ設定を確認）";
-      st.style.color = "#ff4757";
-      updateSyncUI("err", "接続失敗");
-      return;
-    }
-
-    st.textContent = "接続OK（ログイン後に同期します）";
-    st.style.color = "#6bcb77";
-    updateSyncUI("ok", "接続OK");
-
-    ov.style.display = "none";
-  });
-
-  // Clear
-  document.getElementById("apiSetupClear").addEventListener("click", function(){
-    API_URL = "";
-    localStorage.removeItem(API_URL_KEY);
-    document.getElementById("apiUrlInput").value = "";
-    var st = document.getElementById("apiSetupStatus");
-    st.textContent = "切断しました";
-    st.style.color = "var(--muted)";
-    updateSyncUI("warn", "オフライン（⚙でAPI設定）");
-  });
-}
 async function testApiConnection(){
   if(!API_URL) return false;
   try{
@@ -571,7 +526,57 @@ async function testApiConnection(){
     return false;
   }
 }
-// Push data to API
+
+function promptApiUrl() {
+  var ov = document.getElementById("apiSetupOverlay");
+  var inp = document.getElementById("apiUrlInput");
+  var st = document.getElementById("apiSetupStatus");
+  if (!ov) return;
+  inp.value = API_URL || "";
+  st.textContent = API_URL ? "接続中" : "未設定";
+  st.style.color = API_URL ? "#6bcb77" : "var(--muted)";
+  ov.style.display = "block";
+}
+
+function setupApiModal() {
+  var ov = document.getElementById("apiSetupOverlay");
+  if (!ov) return;
+  document.getElementById("apiSetupClose").addEventListener("click", function(){ ov.style.display="none"; });
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.style.display="none"; });
+  
+  document.getElementById("apiSetupSave").addEventListener("click", async function(){
+    var inp = document.getElementById("apiUrlInput");
+    var st = document.getElementById("apiSetupStatus");
+    var url = inp.value.trim();
+    if (!url) { st.textContent = "URLを入力してください"; st.style.color = "#ff4757"; return; }
+    API_URL = url;
+    localStorage.setItem(API_URL_KEY, API_URL);
+    st.textContent = "接続テスト中..."; st.style.color = "#4d96ff";
+    updateSyncUI("loading", "接続テスト中...");
+    
+    var ok = await testApiConnection();
+    if (ok) {
+      st.textContent = "接続成功！"; st.style.color = "#6bcb77";
+      updateSyncUI("ok", "接続成功");
+      startSyncPolling();
+      setTimeout(function(){ ov.style.display="none"; }, 1000);
+    } else {
+      st.textContent = "接続失敗 - URLを確認してください"; st.style.color = "#ff4757";
+      updateSyncUI("err", "接続失敗");
+    }
+  });
+
+  document.getElementById("apiSetupClear").addEventListener("click", function(){
+    API_URL = "";
+    localStorage.removeItem(API_URL_KEY);
+    stopSyncPolling();
+    document.getElementById("apiUrlInput").value = "";
+    var st = document.getElementById("apiSetupStatus");
+    st.textContent = "切断しました"; st.style.color = "var(--muted)";
+    updateSyncUI("warn", "オフライン（⚙でAPI設定）");
+  });
+}
+
 async function syncPush() {
   if (!API_URL || _isSyncing) return false;
   _isSyncing = true;
@@ -579,7 +584,7 @@ async function syncPush() {
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
     payload._version = _syncVersion;
-payload.token = getToken();
+    payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -593,7 +598,7 @@ payload.token = getToken();
       updateSyncUI("ok", "同期済み ✓");
       return true;
     }
-    updateSyncUI("err", "保存エラー");
+    updateSyncUI("err", result.error || "保存エラー");
     return false;
   } catch (e) {
     console.warn("Sync push error:", e);
@@ -604,7 +609,6 @@ payload.token = getToken();
   }
 }
 
-// Pull data from API
 async function syncPull() {
   if (!API_URL || _isSyncing) return false;
   _isSyncing = true;
@@ -615,17 +619,14 @@ async function syncPull() {
       const remoteVer = result.data._version || 0;
       if (remoteVer > _syncVersion) {
         _syncVersion = remoteVer;
-        // Remove sync metadata before storing locally
         const clean = { ...result.data };
         delete clean._version;
         delete clean._updatedAt;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
-        // Re-run migration
         migrateData();
         _lastSyncTime = Date.now();
         updateSyncUI("ok", "同期済み ✓");
-        // Re-render current view
         try { route(); } catch(e) {}
         return true;
       }
@@ -644,7 +645,6 @@ async function syncPull() {
   }
 }
 
-// Lightweight version check (polling)
 async function syncCheckVersion() {
   if (!API_URL || _isSyncing) return;
   try {
@@ -654,11 +654,9 @@ async function syncCheckVersion() {
       await syncPull();
     }
   } catch (e) {
-    // Silent fail on version check
   }
 }
 
-// Start/stop polling
 function startSyncPolling() {
   stopSyncPolling();
   _syncTimer = setInterval(syncCheckVersion, POLL_INTERVAL);
@@ -667,7 +665,6 @@ function stopSyncPolling() {
   if (_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
 }
 
-// Migration helper (extracted for reuse after sync pull)
 function migrateData() {
   Object.values(data.users||{}).forEach(u=>{
     if(u.bonusPoints==null)u.bonusPoints=0;if(u.lastCongrats50==null)u.lastCongrats50=0;
@@ -692,26 +689,20 @@ function migrateData() {
   if(data.taskPrices&&data.taskPrices["その他（時給）"]!=null){data.taskPrices["時給"]=data.taskPrices["その他（時給）"];delete data.taskPrices["その他（時給）"]}
 }
 
-// Initialize sync on page load
 function initSync() {
   setupApiModal();
-
-  // Sync bar buttons
   const setupBtn = document.getElementById("syncSetup");
   if (setupBtn) setupBtn.addEventListener("click", promptApiUrl);
-
   const manualBtn = document.getElementById("syncManual");
   if (manualBtn) manualBtn.addEventListener("click", async () => {
-    // ログイン後（token取得後）に使う想定
     updateSyncUI("loading", "手動同期中...");
     await syncPull();
   });
 
-  // 起動時は「接続できるか」だけ確認（token無しで read/version すると unauthorized になる）
   if (API_URL) {
-    updateSyncUI("loading", "接続確認中...");
+    updateSyncUI("loading", "接続中...");
     testApiConnection().then(ok => {
-      if (ok) updateSyncUI("ok", "接続OK（ログイン待ち）");
+      if (ok) startSyncPolling();
       else updateSyncUI("err", "接続エラー - ⚙で設定確認");
     });
   } else {
@@ -741,35 +732,6 @@ async function uploadFileToDrive(file) {
     reader.readAsDataURL(file);
   });
 }
-
-
-async function downloadDriveFile(fileId, fallbackName){
-  if(!API_URL){ showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
-  try{
-    const url = API_URL + "?action=download&token=" + encodeURIComponent(getToken()) + "&fileId=" + encodeURIComponent(fileId);
-    const resp = await fetch(url, {redirect:"follow"});
-    const r = await resp.json();
-    if(!r.ok){ showModal({title:"ダウンロード失敗",sub:(r.error||"unauthorized"),big:"⚠️"}); return; }
-    const bytes = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
-    const blob = new Blob([bytes], {type: r.mimeType || "application/octet-stream"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = r.name || fallbackName || "download.bin";
-    document.body.appendChild(a); a.click(); a.remove();
-  }catch(e){
-    showModal({title:"通信エラー",sub:String(e),big:"📡"});
-  }
-}
-// file link delegation
-document.addEventListener("click", (ev)=>{
-  const t = ev.target;
-  if(t && t.classList && t.classList.contains("fileLink")){
-    ev.preventDefault();
-    const fid = t.getAttribute("data-fileid");
-    const fn = t.getAttribute("data-filename") || "";
-    if(fid) downloadDriveFile(fid, fn);
-  }
-});
 /* === END SYNC LAYER === */
 
 
