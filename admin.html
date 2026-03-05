@@ -420,7 +420,17 @@ td.editing textarea{min-height:40px;resize:vertical;}
     <div class="bd"><div id="ddStaffList"></div></div></div>
   <div class="card"><div class="hd"><div><p class="title">🔐 管理者アカウント</p><p class="sub">管理画面のログインID・パスワードの変更</p></div></div>
     <div class="bd">
-      <div class="row"><div class="form-group"><label>管理者ID</label><input id="adminCredId" placeholder="管理者ID"></div><div class="form-group"><label>管理者パスワード</label><input id="adminCredPw" type="text" placeholder="パスワード"></div></div>
+      <div class="row"><div class="form-group"><label>管理者ID</label><input id="adminCredId" placeholder="管理者ID"></div>
+        <div class="form-group">
+    <label>旧パスワード（現在）</label>
+    <input id="adminCredOldPw" type="password" placeholder="旧パスワード">
+  </div>
+
+  <div class="form-group">
+    <label>新パスワード</label>
+    <input id="adminCredPw" type="password" placeholder="新パスワード">
+  </div>
+</div></div>
       <button class="btn primary" id="adminCredSave" style="width:100%;margin-top:10px;">変更を保存 ✅</button>
     </div></div>
 </section>
