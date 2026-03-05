@@ -574,13 +574,14 @@ td.editing textarea{min-height:40px;resize:vertical;}
 const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
 
 /* ================================================================ */
+/* ================================================================ */
 /* === GOOGLE DRIVE API SYNC LAYER === */
 /* ================================================================ */
 const API_URL_KEY = "stampcard_api_url";
 const DEFAULT_API_URL = window.APP_CONFIG?.DEFAULT_API_URL || "";
-// config.js に値があればそれを使い、なければブラウザの記憶を使う
+// ★修正1：常に config.js の値を優先する
 let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
-localStorage.setItem(API_URL_KEY, API_URL); // 常に最新のURLで記憶を上書きする
+localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
@@ -624,9 +625,8 @@ let _syncVersion = 0;
 let _syncTimer = null;
 let _isSyncing = false;
 let _lastSyncTime = null;
-const POLL_INTERVAL = 4000; // 4秒ポーリング
+const POLL_INTERVAL = 4000;
 
-// Sync status UI
 function updateSyncUI(status, msg) {
   const dot = document.getElementById("syncDot");
   const msgEl = document.getElementById("syncMsg");
@@ -639,7 +639,18 @@ function updateSyncUI(status, msg) {
   }
 }
 
-// API URL setup - modal based
+// ★修正2：接続確認用の関数を追加（ログイン不要でテストできるもの）
+async function testApiConnection(){
+  if(!API_URL) return false;
+  try{
+    const resp = await fetch(API_URL + "?action=ping", { redirect:"follow" });
+    const r = await resp.json();
+    return !!(r && r.ok && r.ping);
+  }catch(e){
+    return false;
+  }
+}
+
 function promptApiUrl() {
   var ov = document.getElementById("apiSetupOverlay");
   var inp = document.getElementById("apiUrlInput");
@@ -650,11 +661,13 @@ function promptApiUrl() {
   st.style.color = API_URL ? "#6bcb77" : "var(--muted)";
   ov.style.display = "block";
 }
+
 function setupApiModal() {
   var ov = document.getElementById("apiSetupOverlay");
   if (!ov) return;
   document.getElementById("apiSetupClose").addEventListener("click", function(){ ov.style.display="none"; });
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.style.display="none"; });
+  
   document.getElementById("apiSetupSave").addEventListener("click", async function(){
     var inp = document.getElementById("apiUrlInput");
     var st = document.getElementById("apiSetupStatus");
@@ -664,7 +677,9 @@ function setupApiModal() {
     localStorage.setItem(API_URL_KEY, API_URL);
     st.textContent = "接続テスト中..."; st.style.color = "#4d96ff";
     updateSyncUI("loading", "接続テスト中...");
-    var ok = await syncPull();
+    
+    // ★修正3：ログイン不要の ping でテストを実行する
+    var ok = await testApiConnection();
     if (ok) {
       st.textContent = "接続成功！"; st.style.color = "#6bcb77";
       updateSyncUI("ok", "接続成功");
@@ -675,6 +690,7 @@ function setupApiModal() {
       updateSyncUI("err", "接続失敗");
     }
   });
+
   document.getElementById("apiSetupClear").addEventListener("click", function(){
     API_URL = "";
     localStorage.removeItem(API_URL_KEY);
@@ -686,7 +702,6 @@ function setupApiModal() {
   });
 }
 
-// Push data to API
 async function syncPush() {
   if (!API_URL || _isSyncing) return false;
   _isSyncing = true;
@@ -694,7 +709,7 @@ async function syncPush() {
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
     payload._version = _syncVersion;
-payload.token = getToken();payload.token = getToken();
+    payload.token = getToken(); // ★修正4：重複を削除してスッキリ
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -708,7 +723,7 @@ payload.token = getToken();payload.token = getToken();
       updateSyncUI("ok", "同期済み ✓");
       return true;
     }
-    updateSyncUI("err", "保存エラー");
+    updateSyncUI("err", result.error || "保存エラー");
     return false;
   } catch (e) {
     console.warn("Sync push error:", e);
@@ -719,7 +734,6 @@ payload.token = getToken();payload.token = getToken();
   }
 }
 
-// Pull data from API
 async function syncPull() {
   if (!API_URL || _isSyncing) return false;
   _isSyncing = true;
@@ -730,17 +744,14 @@ async function syncPull() {
       const remoteVer = result.data._version || 0;
       if (remoteVer > _syncVersion) {
         _syncVersion = remoteVer;
-        // Remove sync metadata before storing locally
         const clean = { ...result.data };
         delete clean._version;
         delete clean._updatedAt;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
-        // Re-run migration
         migrateData();
         _lastSyncTime = Date.now();
         updateSyncUI("ok", "同期済み ✓");
-        // Re-render current view
         try { route(); } catch(e) {}
         return true;
       }
@@ -759,7 +770,6 @@ async function syncPull() {
   }
 }
 
-// Lightweight version check (polling)
 async function syncCheckVersion() {
   if (!API_URL || _isSyncing) return;
   try {
@@ -769,11 +779,9 @@ async function syncCheckVersion() {
       await syncPull();
     }
   } catch (e) {
-    // Silent fail on version check
   }
 }
 
-// Start/stop polling
 function startSyncPolling() {
   stopSyncPolling();
   _syncTimer = setInterval(syncCheckVersion, POLL_INTERVAL);
@@ -782,7 +790,6 @@ function stopSyncPolling() {
   if (_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
 }
 
-// Migration helper (extracted for reuse after sync pull)
 function migrateData() {
   Object.values(data.users||{}).forEach(u=>{
     if(u.bonusPoints==null)u.bonusPoints=0;if(u.lastCongrats50==null)u.lastCongrats50=0;
@@ -807,10 +814,8 @@ function migrateData() {
   if(data.taskPrices&&data.taskPrices["その他（時給）"]!=null){data.taskPrices["時給"]=data.taskPrices["その他（時給）"];delete data.taskPrices["その他（時給）"]}
 }
 
-// Initialize sync on page load
 function initSync() {
   setupApiModal();
-  // Sync bar buttons
   const setupBtn = document.getElementById("syncSetup");
   if (setupBtn) setupBtn.addEventListener("click", promptApiUrl);
   const manualBtn = document.getElementById("syncManual");
@@ -821,7 +826,8 @@ function initSync() {
 
   if (API_URL) {
     updateSyncUI("loading", "接続中...");
-    syncPull().then(ok => {
+    // ★修正5：ページ読み込み時もログイン不要の ping でテストする
+    testApiConnection().then(ok => {
       if (ok) startSyncPolling();
       else updateSyncUI("err", "接続エラー - ⚙で設定確認");
     });
@@ -829,31 +835,6 @@ function initSync() {
     updateSyncUI("warn", "オフライン（⚙でAPI設定）");
   }
 }
-
-/* === DRIVE FILE UPLOAD === */
-async function uploadFileToDrive(file) {
-  if (!API_URL) return null;
-  return new Promise(function(resolve) {
-    var reader = new FileReader();
-    reader.onload = async function() {
-      try {
-        var b64 = reader.result.split(",")[1];
-        var resp = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ _action: "uploadFile", token: getToken(), fileName: file.name, mimeType: file.type || "application/octet-stream", data: b64 }),
-          redirect: "follow"
-        });
-        var result = await resp.json();
-        if (result.ok) { resolve({ fileId: result.fileId, fileName: result.fileName, url: result.url }); }
-        else { console.warn("Upload error:", result.error); resolve(null); }
-      } catch(e) { console.warn("Upload error:", e); resolve(null); }
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-/* === END SYNC LAYER === */
 
 const RANK_EMOJIS=["⭐","🌟","💫","🔥","💎","👑","🏆","🎖️","💜","🌈","🚀","✨"];
 function getMilestoneCount(total){if(total<200)return Math.floor(total/25);return 8+Math.floor((total-200)/50)}
