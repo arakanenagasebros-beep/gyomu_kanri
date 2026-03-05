@@ -462,7 +462,7 @@ td.editing textarea{min-height:40px;resize:vertical;}
 <script src="./config.js?v=1"></script>
 <script>
 
-const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
+const LS_KEY="stampcard_v7_clean";
 
 /* ================================================================ */
 /* === GOOGLE DRIVE API SYNC LAYER === */
@@ -550,8 +550,10 @@ async function syncPush() {
   updateSyncUI("loading", "保存中...");
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    // session は端末ローカル専用（同期しない）
+    if (payload && payload.session) delete payload.session;
     payload._version = _syncVersion;
-payload.token = getToken();payload.token = getToken();
+    payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -591,6 +593,9 @@ async function syncPull() {
         const clean = { ...result.data };
         delete clean._version;
         delete clean._updatedAt;
+        // session は端末ローカル専用（同期しない）
+        const local = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+        if (local && local.session) clean.session = local.session;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
         // Re-run migration
@@ -677,11 +682,15 @@ function initSync() {
   });
 
   if (API_URL) {
-    updateSyncUI("loading", "接続中...");
-    syncPull().then(ok => {
-      if (ok) startSyncPolling();
-      else updateSyncUI("err", "接続エラー - ⚙で設定確認");
-    });
+    if (getToken()) {
+      updateSyncUI("loading", "接続中...");
+      syncPull().then(ok => {
+        if (ok) startSyncPolling();
+        else updateSyncUI("err", "接続エラー - ⚙で設定確認");
+      });
+    } else {
+      updateSyncUI("warn", "未ログイン（ログイン後に同期）");
+    }
   } else {
     updateSyncUI("warn", "オフライン（⚙でAPI設定）");
   }
