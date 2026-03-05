@@ -666,7 +666,9 @@ function stopSyncPolling() {
 }
 
 function migrateData() {
-  Object.values(data.users||{}).forEach(u=>{
+  Object.keys(data.users||{}).forEach(id=>{
+    let u = data.users[id]; if(!u) return;
+    if(!u.id) u.id = id; // undefined になるのを自動修復！
     if(u.bonusPoints==null)u.bonusPoints=0;if(u.lastCongrats50==null)u.lastCongrats50=0;
     if(!u.lastMonthFirstStamp)u.lastMonthFirstStamp="";if(!u.reports)u.reports=[];
     if(!u.proofingIncentives)u.proofingIncentives={};if(!u.userType)u.userType="学生";
@@ -831,7 +833,7 @@ function getAllUsersDateRange(){let mn=null,mx=null;Object.values(data.users).fo
 function buildYearMonthOpts(ySel,mSel,dr,def){const now=new Date();const minY=dr.min.getFullYear();const maxY=Math.max(dr.max.getFullYear(),now.getFullYear())+1;
   ySel.innerHTML="";const a=document.createElement("option");a.value="全て";a.textContent="全て";ySel.appendChild(a);for(let y=minY;y<=maxY;y++){const o=document.createElement("option");o.value=y;o.textContent=y+"年";ySel.appendChild(o);}if(def)ySel.value=String(now.getFullYear());
   mSel.innerHTML="";const b=document.createElement("option");b.value="全て";b.textContent="全て";mSel.appendChild(b);for(let m=1;m<=12;m++){const o=document.createElement("option");o.value=m;o.textContent=m+"月";mSel.appendChild(o);}if(def)mSel.value=String(now.getMonth()+1)}
-function filterReports(reps,y,m,wt){return reps.filter(r=>{if(!r.date)return false;const d=new Date(r.date+"T00:00:00");if(y!=="全て"&&d.getFullYear()!==parseInt(y))return false;if(m!=="全て"&&(d.getMonth()+1)!==parseInt(m))return false;if(wt!=="全て"&&r.workType!==wt)return false;return true})}
+function filterReports(reps,y,m,wt){reps=reps||[];return reps.filter(r=>{if(!r.date)return false;const d=new Date(r.date+"T00:00:00");if(y!=="全て"&&d.getFullYear()!==parseInt(y))return false;if(m!=="全て"&&(d.getMonth()+1)!==parseInt(m))return false;if(wt!=="全て"&&r.workType!==wt)return false;return true})}
 
 /* Auto-check overdue tasks */
 function checkOverdue(){const today=ymd(new Date());data.tasks.forEach(t=>{if(t.status==="依頼中"&&t.deadline&&t.deadline<today)t.status="期限超過";});saveData(data)}
