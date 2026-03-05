@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <link rel="icon" href="data:,">
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>業務管理アプリ - 管理者</title>
@@ -588,17 +587,16 @@ function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); }
 
 async function fetchTodayPasswordForAdmin(){
   if(!API_URL) return null;
-  const t=getToken();
+  const t = getToken();
   if(!t) return null;
-  const resp = await fetch(API_URL, {
-    method:"POST",
-    headers:{ "Content-Type":"text/plain" },
-    body: JSON.stringify({_action:"getTodayPassword", token:t}),
-    redirect:"follow"
-  });
-  const r = await resp.json();
-  if(!r || !r.ok) return null;
-  return r.password || null;
+  try{
+    const resp = await fetch(API_URL + "?action=todayPassword&token=" + encodeURIComponent(t), { redirect:"follow" });
+    const r = await resp.json();
+    if(!r || !r.ok) return null;
+    return r.password || null;
+  }catch(e){
+    return null;
+  }
 }
 
 async function downloadDriveFile(fileId, fileName){
