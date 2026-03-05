@@ -578,8 +578,9 @@ const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
 /* ================================================================ */
 const API_URL_KEY = "stampcard_api_url";
 const DEFAULT_API_URL = window.APP_CONFIG?.DEFAULT_API_URL || "";
-let API_URL = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
-if (!localStorage.getItem(API_URL_KEY) && DEFAULT_API_URL) localStorage.setItem(API_URL_KEY, DEFAULT_API_URL);
+// config.js に値があればそれを使い、なければブラウザの記憶を使う
+let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
+localStorage.setItem(API_URL_KEY, API_URL); // 常に最新のURLで記憶を上書きする
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
