@@ -1126,7 +1126,7 @@ const dr=getUserDateRange(u);buildYearMonthOpts($("rcFilterYear"),$("rcFilterMon
 function doRenderReportList(){const u=data.users[data.session.userId];if(!u)return;const y=$("rcFilterYear").value,m=$("rcFilterMonth").value,wt=$("rcFilterType").value;
 const filtered=filterReports(u.reports,y,m,wt);$("reportThead").innerHTML=`<tr><th>#</th><th>日付</th><th>形態</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務</th><th>業務ID</th><th>商品ID</th><th>サービスID</th><th>テキストコード</th><th>年度</th><th>内容</th><th>給与</th><th>詳細</th><th>操作</th></tr>`;
 const tb=$("reportTbody");tb.innerHTML="";let tMin=0,tSal=0,tTr=0,tInc=0;
-if(!filtered.length){tb.innerHTML=`<tr><td colspan="${isZaitaku?13:17}" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`}else{
+if(!filtered.length){tb.innerHTML=`<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`}else{
 filtered.forEach((r,fi)=>{const oi=u.reports.indexOf(r);const sal=Math.round(calcReportSalary(r,u.id));const mins=calcWorkMinutes(r);const tr_t=r.workType==="出勤"?parseInt(r.transport)||0:0;tMin+=mins;tSal+=sal;tTr+=tr_t;
 const isShakaijin=(u.userType||"学生")==="社会人";
 if(isShakaijin){tInc+=r.incentiveAmount||0}else{tInc+=(r.proofCount||0)*500}
