@@ -571,7 +571,7 @@ td.editing textarea{min-height:40px;resize:vertical;}
 <script src="./config.js?v=1"></script>
 <script>
 
-const LS_KEY="stampcard_v7_clean";
+const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
 
 /* ================================================================ */
 /* === GOOGLE DRIVE API SYNC LAYER === */
@@ -659,9 +659,8 @@ async function syncPush() {
   updateSyncUI("loading", "保存中...");
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-    if (payload && payload.session) delete payload.session;
     payload._version = _syncVersion;
-    payload.token = getToken();
+payload.token = getToken();payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -701,8 +700,6 @@ async function syncPull() {
         const clean = { ...result.data };
         delete clean._version;
         delete clean._updatedAt;
-        const local = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-        if (local && local.session) clean.session = local.session;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
         // Re-run migration
@@ -961,7 +958,7 @@ $("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.displa
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
 function route(){checkOverdue();const h=location.hash||"#admin-login";
 if(h==="#user-login"||h==="#user-stamp"||h==="#user"||h==="#report-input"||h==="#report-confirm"||h==="#staff-task-list"){window.location.href="staff.html"+h;return}
-if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";return}
+if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";$("adminLoginPw").value="";return}
 if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminReportMgmt");renderAdminReportMgmt();return}
 if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.adminReportEditingUserId){location.hash="#admin-report-mgmt";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
 if(h==="#admin-task-list"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminTaskList");renderAdminTaskList();return}
@@ -1415,7 +1412,7 @@ const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.cre
 $("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
 $("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
-function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent=getTodayPassword();const users=Object.values(data.users).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
+function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin().then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
 const tr=document.createElement("tr");[String(idx+1),null,u.name||u.id,null,countThisWeek(u,now)+"回",countThisMonth(u,now)+"回",total+"pt",null,rank.yen+"円",sInc.toLocaleString()+"円"].forEach((c,i)=>{
 const td=document.createElement("td");if(i===1)td.innerHTML=`<span class="tag">${escapeHtml(u.id)}</span>`;
@@ -2256,33 +2253,36 @@ function renderAdminCreds() {
   $("adminCredId").value = data._adminId || ADMIN_ID;
   $("adminCredPw").value = data._adminPw || ADMIN_PW;
 }
-$("adminCredSave").addEventListener("click", async function () {
-  var nid = $("adminCredId").value.trim();
-  var npw = $("adminCredPw").value.trim();
-  if (!nid || !npw) { showModal({title:"ID・PWは必須です",big:"⚠️"}); return; }
+$("adminCredSave").addEventListener("click", async function(){
+  const nid = $("adminCredId").value.trim();
+  const oldPw = ($("adminCredOldPw")?$("adminCredOldPw").value:"").trim();
+  const npw = $("adminCredPw").value.trim();
 
-  if (!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
-
-  // 旧PW入力（モーダル等にしてもOK。簡易にprompt扱いでもよいが、あなたはprompt排除方針なので入力欄を増やすのが理想）
-  // ここでは暫定で「現在PWは adminCredPw に入っている前提」にして、
-  // 旧PWを別inputで持つのがベストです。
-  var oldPw = prompt("旧パスワードを入力してください"); // ←※ここも本当はモーダル化推奨
-
-  try {
-    const resp = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type":"text/plain"},
-      body: JSON.stringify({_action:"setAdminCreds", token:getToken(), oldPw, newId:nid, newPw:npw}),
-      redirect: "follow"
+  if(!nid || !oldPw || !npw){
+    showModal({title:"ID・旧PW・新PWは必須です",big:"⚠️"});
+    return;
+  }
+  if(!API_URL){
+    showModal({title:"API未接続です（⚙で設定）",big:"⚠️"});
+    return;
+  }
+  try{
+    const resp = await fetch(API_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"text/plain" },
+      body: JSON.stringify({_action:"setAdminCreds", token:getToken(), oldPw:oldPw, newId:nid, newPw:npw}),
+      redirect:"follow"
     });
-    const result = await resp.json();
-    if (!result.ok) {
-      showModal({title:"更新失敗", sub: result.error || "不明なエラー", big:"⚠️"});
+    const r = await resp.json();
+    if(!r.ok){
+      showModal({title:"更新失敗",sub:(r.error||"unauthorized"),big:"⚠️"});
       return;
     }
-    showModal({title:"管理者情報を更新しました", sub:"次回ログインから新しいID/PWを使用します", big:"✅"});
-  } catch (e) {
-    showModal({title:"通信エラー", sub: String(e), big:"⚠️"});
+    showModal({title:"更新しました",sub:"次回ログインから新ID/PWです",big:"✅"});
+    $("adminCredOldPw").value="";
+    $("adminCredPw").value="";
+  }catch(e){
+    showModal({title:"通信エラー",sub:String(e),big:"📡"});
   }
 });
 

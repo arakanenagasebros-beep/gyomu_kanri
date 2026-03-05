@@ -462,7 +462,7 @@ td.editing textarea{min-height:40px;resize:vertical;}
 <script src="./config.js?v=1"></script>
 <script>
 
-const LS_KEY="stampcard_v7_clean";
+const LS_KEY="stampcard_v7_clean",ADMIN_ID="suugaku",ADMIN_PW="stamp";
 
 /* ================================================================ */
 /* === GOOGLE DRIVE API SYNC LAYER === */
@@ -550,10 +550,8 @@ async function syncPush() {
   updateSyncUI("loading", "保存中...");
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-    // session は端末ローカル専用（同期しない）
-    if (payload && payload.session) delete payload.session;
     payload._version = _syncVersion;
-    payload.token = getToken();
+payload.token = getToken();payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -593,9 +591,6 @@ async function syncPull() {
         const clean = { ...result.data };
         delete clean._version;
         delete clean._updatedAt;
-        // session は端末ローカル専用（同期しない）
-        const local = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-        if (local && local.session) clean.session = local.session;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
         // Re-run migration
@@ -682,15 +677,11 @@ function initSync() {
   });
 
   if (API_URL) {
-    if (getToken()) {
-      updateSyncUI("loading", "接続中...");
-      syncPull().then(ok => {
-        if (ok) startSyncPolling();
-        else updateSyncUI("err", "接続エラー - ⚙で設定確認");
-      });
-    } else {
-      updateSyncUI("warn", "未ログイン（ログイン後に同期）");
-    }
+    updateSyncUI("loading", "接続中...");
+    syncPull().then(ok => {
+      if (ok) startSyncPolling();
+      else updateSyncUI("err", "接続エラー - ⚙で設定確認");
+    });
   } else {
     updateSyncUI("warn", "オフライン（⚙でAPI設定）");
   }
@@ -719,8 +710,46 @@ async function uploadFileToDrive(file) {
   });
 }
 
+
+async function downloadDriveFile(fileId, fallbackName){
+  if(!API_URL){ showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
+  try{
+    const url = API_URL + "?action=download&token=" + encodeURIComponent(getToken()) + "&fileId=" + encodeURIComponent(fileId);
+    const resp = await fetch(url, {redirect:"follow"});
+    const r = await resp.json();
+    if(!r.ok){ showModal({title:"ダウンロード失敗",sub:(r.error||"unauthorized"),big:"⚠️"}); return; }
+    const bytes = Uint8Array.from(atob(r.data), c=>c.charCodeAt(0));
+    const blob = new Blob([bytes], {type: r.mimeType || "application/octet-stream"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = r.name || fallbackName || "download.bin";
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){
+    showModal({title:"通信エラー",sub:String(e),big:"📡"});
+  }
+}
+// file link delegation
+document.addEventListener("click", (ev)=>{
+  const t = ev.target;
+  if(t && t.classList && t.classList.contains("fileLink")){
+    ev.preventDefault();
+    const fid = t.getAttribute("data-fileid");
+    const fn = t.getAttribute("data-filename") || "";
+    if(fid) downloadDriveFile(fid, fn);
+  }
+});
 /* === END SYNC LAYER === */
 
+
+function ensureUserShape(u){
+  if(!u) return;
+  u.id = u.id || data.session.userId || u.id;
+  u.stamps = u.stamps || {};
+  u.reports = u.reports || [];
+  u.tasks = u.tasks || [];
+  u.pendingStampRequest = u.pendingStampRequest || null;
+  u.fileIds = u.fileIds || u.fileIds;
+}
 const RANK_EMOJIS=["⭐","🌟","💫","🔥","💎","👑","🏆","🎖️","💜","🌈","🚀","✨"];
 function getMilestoneCount(total){if(total<200)return Math.floor(total/25);return 8+Math.floor((total-200)/50)}
 function getNextMilestone(total){if(total<200)return Math.ceil((total+1)/25)*25;return 200+Math.ceil((total-200+1)/50)*50}
@@ -939,7 +968,7 @@ const tabNav=(rm,sm,tl,dd,mc)=>{$(rm).addEventListener("click",()=>location.hash
 tabNav("tabRM","tabSM","tabTL","tabDD","tabMC");tabNav("tabRM2","tabSM2","tabTL2","tabDD2","tabMC2");tabNav("tabRM3","tabSM3","tabTL3","tabDD3","tabMC3");tabNav("tabRM4","tabSM4","tabTL4","tabDD4","tabMC4");
 
 /* === STAMP SCREEN === */
-function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
 u.stamps = u.stamps || {};
 const now=new Date(),total=countTotal(u),stamped=!!u.stamps[ymd(now)];
 $("stampUserName").textContent=u.name||u.id;$("stampDate").textContent=`${now.getMonth()+1}月${now.getDate()}日（${dowJa(now)}）`;
@@ -984,7 +1013,7 @@ $("uThis").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date()
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
-function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
 u.stamps = u.stamps || {};
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
@@ -1563,7 +1592,9 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       } else if(t.status==="依頼前"){
         tdSub.textContent="―";
       } else {
-        if(t.fileNames&&t.fileNames.length){tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${escapeHtml(t.fileNames.join(", "))}</span>`}
+        if(t.fileNames&&t.fileNames.length){
+        const links=(t.fileIds&&t.fileIds.length)?t.fileNames.map((n,i)=>{const fid=t.fileIds[i];return fid?`<a href="#" class="fileLink" data-fileid="${fid}" data-filename="${escapeHtml(n)}">${escapeHtml(n)}</a>`:escapeHtml(n);}).join(", "):escapeHtml(t.fileNames.join(", "));
+        tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${links}</span>`}
       }
     }
     tr.appendChild(tdSub);
