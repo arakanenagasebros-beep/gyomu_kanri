@@ -510,54 +510,53 @@ function promptApiUrl() {
 function setupApiModal() {
   var ov = document.getElementById("apiSetupOverlay");
   if (!ov) return;
+
+  // Close
   document.getElementById("apiSetupClose").addEventListener("click", function(){ ov.style.display="none"; });
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.style.display="none"; });
+
+  // Save + ping
   document.getElementById("apiSetupSave").addEventListener("click", async function(){
     var inp = document.getElementById("apiUrlInput");
-    var st = document.getElementById("apiSetupStatus");
-    var url = inp.value.trim();
-    if (!url) { st.textContent = "URLを入力してください"; st.style.color = "#ff4757"; return; }
+    var st  = document.getElementById("apiSetupStatus");
+    var url = (inp.value || "").trim();
+
+    if (!url) {
+      st.textContent = "URLを入力してください";
+      st.style.color = "#ff4757";
+      return;
+    }
+
     API_URL = url;
     localStorage.setItem(API_URL_KEY, API_URL);
-    st.textContent = "接続テスト中..."; st.style.color = "#4d96ff";
+
+    st.textContent = "接続テスト中...";
+    st.style.color = "#4d96ff";
     updateSyncUI("loading", "接続テスト中...");
-    $("apiSetupSave").addEventListener("click", async ()=>{
-  const url = $("apiUrlInput").value.trim();
-  if(!url){ $("apiSetupMsg").textContent="URLを入力してください"; return; }
 
-  API_URL = url;
-  localStorage.setItem("apiUrl", API_URL);
-
-  $("apiSetupMsg").textContent="接続テスト中…";
-
-  const ok = await testApiConnection();   // ★ここが ping
-  if(!ok){
-    $("apiSetupMsg").textContent="接続できません（URL/デプロイ設定を確認）";
-    return;
-  }
-
-  $("apiSetupMsg").textContent="接続OK（ログイン後に同期します）";
-  // ここでは syncPull しない（token無しだと unauthorized になるため）
-  $("apiSetupOverlay").style.display="none";
-  updateSyncStatus();
-});;
-    if (ok) {
-      st.textContent = "接続成功！"; st.style.color = "#6bcb77";
-      updateSyncUI("ok", "接続成功");
-      startSyncPolling();
-      setTimeout(function(){ ov.style.display="none"; }, 1000);
-    } else {
-      st.textContent = "接続失敗 - URLを確認してください"; st.style.color = "#ff4757";
+    var ok = await testApiConnection(); // ?action=ping
+    if (!ok) {
+      st.textContent = "接続できません（URL/デプロイ設定を確認）";
+      st.style.color = "#ff4757";
       updateSyncUI("err", "接続失敗");
+      return;
     }
+
+    st.textContent = "接続OK（ログイン後に同期します）";
+    st.style.color = "#6bcb77";
+    updateSyncUI("ok", "接続OK");
+
+    ov.style.display = "none";
   });
+
+  // Clear
   document.getElementById("apiSetupClear").addEventListener("click", function(){
     API_URL = "";
     localStorage.removeItem(API_URL_KEY);
-    stopSyncPolling();
     document.getElementById("apiUrlInput").value = "";
     var st = document.getElementById("apiSetupStatus");
-    st.textContent = "切断しました"; st.style.color = "var(--muted)";
+    st.textContent = "切断しました";
+    st.style.color = "var(--muted)";
     updateSyncUI("warn", "オフライン（⚙でAPI設定）");
   });
 }
@@ -579,7 +578,7 @@ async function syncPush() {
   try {
     const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
     payload._version = _syncVersion;
-payload.token = getToken();payload.token = getToken();
+payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
@@ -695,19 +694,23 @@ function migrateData() {
 // Initialize sync on page load
 function initSync() {
   setupApiModal();
+
   // Sync bar buttons
   const setupBtn = document.getElementById("syncSetup");
   if (setupBtn) setupBtn.addEventListener("click", promptApiUrl);
+
   const manualBtn = document.getElementById("syncManual");
   if (manualBtn) manualBtn.addEventListener("click", async () => {
+    // ログイン後（token取得後）に使う想定
     updateSyncUI("loading", "手動同期中...");
     await syncPull();
   });
 
+  // 起動時は「接続できるか」だけ確認（token無しで read/version すると unauthorized になる）
   if (API_URL) {
-    updateSyncUI("loading", "接続中...");
-    syncPull().then(ok => {
-      if (ok) startSyncPolling();
+    updateSyncUI("loading", "接続確認中...");
+    testApiConnection().then(ok => {
+      if (ok) updateSyncUI("ok", "接続OK（ログイン待ち）");
       else updateSyncUI("err", "接続エラー - ⚙で設定確認");
     });
   } else {
