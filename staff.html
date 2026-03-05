@@ -521,7 +521,26 @@ function setupApiModal() {
     localStorage.setItem(API_URL_KEY, API_URL);
     st.textContent = "接続テスト中..."; st.style.color = "#4d96ff";
     updateSyncUI("loading", "接続テスト中...");
-    var ok = await syncPull();
+    $("apiSetupSave").addEventListener("click", async ()=>{
+  const url = $("apiUrlInput").value.trim();
+  if(!url){ $("apiSetupMsg").textContent="URLを入力してください"; return; }
+
+  API_URL = url;
+  localStorage.setItem("apiUrl", API_URL);
+
+  $("apiSetupMsg").textContent="接続テスト中…";
+
+  const ok = await testApiConnection();   // ★ここが ping
+  if(!ok){
+    $("apiSetupMsg").textContent="接続できません（URL/デプロイ設定を確認）";
+    return;
+  }
+
+  $("apiSetupMsg").textContent="接続OK（ログイン後に同期します）";
+  // ここでは syncPull しない（token無しだと unauthorized になるため）
+  $("apiSetupOverlay").style.display="none";
+  updateSyncStatus();
+});;
     if (ok) {
       st.textContent = "接続成功！"; st.style.color = "#6bcb77";
       updateSyncUI("ok", "接続成功");
@@ -542,7 +561,16 @@ function setupApiModal() {
     updateSyncUI("warn", "オフライン（⚙でAPI設定）");
   });
 }
-
+async function testApiConnection(){
+  if(!API_URL) return false;
+  try{
+    const resp = await fetch(API_URL + "?action=ping", { redirect:"follow" });
+    const r = await resp.json();
+    return !!(r && r.ok && r.ping);
+  }catch(e){
+    return false;
+  }
+}
 // Push data to API
 async function syncPush() {
   if (!API_URL || _isSyncing) return false;
