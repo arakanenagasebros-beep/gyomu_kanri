@@ -624,7 +624,7 @@ async function processQueue() {
       } else {
         updateSyncUI("err", result.error || "保存エラー");
       }
-  } catch (e) {
+  } }catch (e) {
     updateSyncUI("err", "通信エラー");
   }
   isSending = false;
