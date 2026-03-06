@@ -915,9 +915,15 @@ function initSync() {
 
   if (API_URL) {
     updateSyncUI("loading", "接続中...");
-    // ★修正5：ページ読み込み時もログイン不要の ping でテストする
     testApiConnection().then(ok => {
-      if (ok) startSyncPolling();
+      if (ok) {
+        // ★ここが前回のファイルには入っていませんでした！
+        updateSyncUI("ok", "接続成功 ✓"); 
+        startSyncPolling();
+        
+        // ★ログイン済みなら画面を開いた瞬間に最新データを取得する
+        if (getToken()) syncPull(); 
+      }
       else updateSyncUI("err", "接続エラー - ⚙で設定確認");
     });
   } else {
