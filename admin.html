@@ -994,7 +994,8 @@ let data=loadData();
 // Migration (uses shared migrateData function)
 migrateData();
 function getUserHourlyRate(userId){return data.userHourlyRates&&data.userHourlyRates[userId]!=null?data.userHourlyRates[userId]:HOURLY_RATE}
-saveData(data);
+localStorage.setItem(LS_KEY, JSON.stringify(data));
+lastSyncedDataStr = JSON.stringify(data);
 
 function getTaskPrice(name){return data.taskPrices&&data.taskPrices[name]!=null?data.taskPrices[name]:(TASK_PRICES[name]!=null?TASK_PRICES[name]:null)}
 function getTaskTypes(){return data.taskTypes||DEFAULT_TASK_TYPES}
