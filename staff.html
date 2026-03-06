@@ -617,8 +617,13 @@ async function processQueue() {
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "同期済み ✓");
     } else {
-      updateSyncUI("err", result.error || "保存エラー");
-    }
+      // ★追加：エラーが「未認証/期限切れ」ならログアウトさせる
+      if (result.error === "unauthorized" || result.error === "forbidden") {
+        alert("セッションの有効期限が切れました。再度ログインしてください。");
+        doLogout();
+      } else {
+        updateSyncUI("err", result.error || "保存エラー");
+      }
   } catch (e) {
     updateSyncUI("err", "通信エラー");
   }
