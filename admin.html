@@ -625,7 +625,7 @@ let _syncVersion = 0;
 let _syncTimer = null;
 let _isSyncing = false;
 let _lastSyncTime = null;
-const POLL_INTERVAL = 4000;
+const POLL_INTERVAL = 30000;
 
 function updateSyncUI(status, msg) {
   const dot = document.getElementById("syncDot");
