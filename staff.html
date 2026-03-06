@@ -287,25 +287,32 @@ td.editing textarea{min-height:40px;resize:vertical;}
 .status-業務過多{color:#ff9a56;font-weight:900;}
 .status-双方不一致{color:#ff4757;font-weight:900;}
 
-/* Sync indicator */
-.sync-bar{position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:10px 16px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  font-size:12px;font-weight:700;font-family:var(--font-body);
-  background:rgba(255,255,255,.96);border-top:2px solid rgba(45,27,78,.12);
-  backdrop-filter:blur(12px);box-shadow:0 -4px 20px rgba(0,0,0,.08);}
-.sync-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.sync-dot.ok{background:#6bcb77;}
-.sync-dot.warn{background:#ffd93d;}
-.sync-dot.err{background:#ff4757;}
-.sync-dot.loading{background:#4d96ff;animation:syncPulse 1s infinite;}
-@keyframes syncPulse{0%,100%{opacity:1}50%{opacity:.3}}
-.sync-left{display:flex;align-items:center;gap:6px;color:var(--muted);}
-.sync-right{display:flex;align-items:center;gap:8px;}
-.sync-btn{padding:8px 14px;border-radius:10px;border:2px solid rgba(45,27,78,.15);
-  background:rgba(255,255,255,.9);cursor:pointer;font-size:12px;font-weight:700;
-  font-family:var(--font-body);color:var(--text);min-height:36px;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
-.sync-btn:hover{background:rgba(255,107,157,.1);border-color:rgba(255,107,157,.3);}
+/* Sync Status Badge */
+.sync-badge {
+  position: fixed;
+  bottom: 16px; /* 画面下からの浮き具合 */
+  left: 16px;   /* 画面左からの位置（右下にしたい場合は right: 16px; left: auto; に変更） */
+  z-index: 9999;
+  padding: 8px 14px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(45, 27, 78, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(8px);
+  pointer-events: none; /* ★重要：バッジの下にある要素をクリック可能にする */
+}
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sync-dot.ok { background: #6bcb77; box-shadow: 0 0 6px rgba(107,203,119,0.6); }
+.sync-dot.warn { background: #ffd93d; }
+.sync-dot.err { background: #ff4757; }
+.sync-dot.loading { background: #4d96ff; animation: syncPulse 1s infinite; }
+@keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 </style>
 </head>
 <body>
@@ -2107,42 +2114,10 @@ function renderAdminNotifications(){
 </div>
 
 
-<!-- Sync Status Bar -->
-<div class="sync-bar" id="syncBar">
-  <div class="sync-left">
-    <span class="sync-dot loading" id="syncDot"></span>
-    <span id="syncMsg">接続中...</span>
-  </div>
-  <div class="sync-right">
-    <span id="syncTime" style="font-size:10px;color:var(--muted);"></span>
-    <button class="sync-btn" id="syncManual" title="手動同期">🔄 同期</button>
-    <button class="sync-btn" id="syncSetup" title="API URL設定">⚙</button>
-  </div>
+<div class="sync-badge" id="syncBar">
+  <span class="sync-dot loading" id="syncDot"></span>
+  <span id="syncMsg">接続中...</span>
 </div>
-<!-- API設定モーダル -->
-<div class="overlay" id="apiSetupOverlay" style="display:none;">
-  <div class="modal" style="max-width:480px;">
-    <div class="mh"><div><h3>⚙ API接続設定</h3><p class="sub">Google Apps Script のデプロイURLを設定</p></div>
-      <button class="btn small" id="apiSetupClose">閉じる</button></div>
-    <div class="mb" style="display:grid;gap:12px;">
-      <div class="help" style="margin:0;">
-        <div style="font-weight:900;margin-bottom:6px;">セットアップ手順</div>
-        1. script.google.com で新規プロジェクト作成<br>
-        2. Code.gs にAPIコードを貼り付け<br>
-        3.「デプロイ」→「ウェブアプリ」で公開<br>
-        4. 表示されたURLを下に入力
-      </div>
-      <div>
-        <label>API URL</label>
-        <input id="apiUrlInput" type="url" placeholder="https://script.google.com/macros/s/..." style="font-size:13px;">
-      </div>
-      <div id="apiSetupStatus" style="font-size:13px;color:var(--muted);min-height:20px;"></div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn primary" id="apiSetupSave" style="flex:1;">接続テスト＆保存</button>
-        <button class="btn ghost" id="apiSetupClear" style="flex:0 0 auto;">切断</button>
-      </div>
-    </div>
-  </div>
-</div>
+
 </body>
 </html>
