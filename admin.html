@@ -709,18 +709,33 @@ function setupApiModal() {
   });
 }
 
-async function syncPush() {
-  if (!API_URL || _isSyncing) return false;
-  _isSyncing = true;
+
+
+// ==========================================
+// ▼▼▼ スマート同期システム（差分自動検知） ▼▼▼
+// ==========================================
+let lastSyncedDataStr = localStorage.getItem(LS_KEY) || "{}";
+let actionQueue = [];
+let isSending = false;
+
+// 変更アクションをキューに入れて順番に送信する
+function queueAction(action, payload) {
+  actionQueue.push({ action, payload });
+  processQueue();
+}
+
+async function processQueue() {
+  if (isSending || actionQueue.length === 0 || !API_URL) return;
+  isSending = true;
+  const req = actionQueue.shift();
   updateSyncUI("loading", "保存中...");
   try {
-    const payload = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-    payload._version = _syncVersion;
-    payload.token = getToken(); // ★修正4：重複を削除してスッキリ
+    req.payload._action = req.action;
+    req.payload.token = getToken();
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(req.payload),
       redirect: "follow"
     });
     const result = await resp.json();
@@ -728,18 +743,18 @@ async function syncPush() {
       _syncVersion = result.version || _syncVersion + 1;
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "同期済み ✓");
-      return true;
+    } else {
+      updateSyncUI("err", result.error || "保存エラー");
     }
-    updateSyncUI("err", result.error || "保存エラー");
-    return false;
   } catch (e) {
-    console.warn("Sync push error:", e);
     updateSyncUI("err", "通信エラー");
-    return false;
-  } finally {
-    _isSyncing = false;
   }
+  isSending = false;
+  processQueue(); // 次があれば連続処理
 }
+
+// 従来の syncPush() はダミー化（エラー防止用）
+async function syncPush() { return true; }
 
 async function syncPull() {
   if (!API_URL || _isSyncing) return false;
@@ -756,6 +771,7 @@ async function syncPull() {
         delete clean._updatedAt;
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
+        lastSyncedDataStr = JSON.stringify(clean); // ←ベースラインも更新
         migrateData();
         _lastSyncTime = Date.now();
         updateSyncUI("ok", "同期済み ✓");
@@ -766,16 +782,80 @@ async function syncPull() {
       updateSyncUI("ok", "最新 ✓");
       return true;
     }
-    updateSyncUI("err", "読み込みエラー");
+    updateSyncUI("err", "読込エラー");
     return false;
   } catch (e) {
-    console.warn("Sync pull error:", e);
     updateSyncUI("err", "通信エラー");
     return false;
   } finally {
     _isSyncing = false;
   }
 }
+
+// 賢くなった新しい saveData
+function saveData(d) {
+  // 1. ローカルに即座に保存（画面上のレスポンスを最速にするため）
+  localStorage.setItem(LS_KEY, JSON.stringify(d));
+  
+  // 2. 自動検知：前回同期した時点のデータと比較
+  const oldD = JSON.parse(lastSyncedDataStr);
+  const newD = d;
+
+  // --- タスクの変更を検知 ---
+  const oldTasks = oldD.tasks || [];
+  const newTasks = newD.tasks || [];
+  newTasks.forEach(nT => {
+    const oT = oldTasks.find(t => t.id === nT.id);
+    if (!oT || JSON.stringify(oT) !== JSON.stringify(nT)) {
+      queueAction("updateTask", { task: nT, isDelete: false });
+    }
+  });
+  oldTasks.forEach(oT => {
+    if (!newTasks.find(t => t.id === oT.id)) {
+      queueAction("updateTask", { task: { id: oT.id }, isDelete: true });
+    }
+  });
+
+  // --- ユーザーデータ（スタンプ・日報）の変更を検知 ---
+  const oldUsers = oldD.users || {};
+  const newUsers = newD.users || {};
+  Object.keys(newUsers).forEach(uid => {
+    if (JSON.stringify(oldUsers[uid]) !== JSON.stringify(newUsers[uid])) {
+      queueAction("updateUserFull", { targetUserId: uid, userObj: newUsers[uid] });
+    }
+  });
+
+  // --- マスタデータの変更を検知 ---
+  let masterChanged = false;
+  let deletedUid = null;
+  if (JSON.stringify(oldD.taskTypes) !== JSON.stringify(newD.taskTypes)) masterChanged = true;
+  if (JSON.stringify(oldD.taskPrices) !== JSON.stringify(newD.taskPrices)) masterChanged = true;
+  if (JSON.stringify(oldD.employees) !== JSON.stringify(newD.employees)) masterChanged = true;
+  if (JSON.stringify(oldD.userHourlyRates) !== JSON.stringify(newD.userHourlyRates)) masterChanged = true;
+  if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) masterChanged = true;
+  if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) masterChanged = true;
+  Object.keys(oldUsers).forEach(uid => {
+    if (!newUsers[uid]) { masterChanged = true; deletedUid = uid; }
+  });
+
+  if (masterChanged) {
+    queueAction("updateMaster", {
+      taskTypes: newD.taskTypes,
+      taskPrices: newD.taskPrices,
+      employees: newD.employees,
+      userHourlyRates: newD.userHourlyRates,
+      staffWorkStatus: newD.staffWorkStatus,
+      lockedMonths: newD.lockedMonths,
+      deleteUserId: deletedUid
+    });
+  }
+
+  // 最後に比較用のベースラインを更新
+  lastSyncedDataStr = JSON.stringify(d);
+}
+// ==========================================
+// ▲▲▲ スマート同期システムここまで ▲▲▲
+// ==========================================
 
 async function syncCheckVersion() {
   if (!API_URL || _isSyncing) return;
@@ -899,7 +979,6 @@ function loadData(){
   return{users,session:{userId:"",adminAuthed:false,adminEditingUserId:"",adminReportEditingUserId:""},
     tasks,employees:[...DEFAULT_EMPLOYEES],taskTypes:[...DEFAULT_TASK_TYPES],taskPrices:{...TASK_PRICES},staffWorkStatus:{}};
 }
-function saveData(d){localStorage.setItem(LS_KEY,JSON.stringify(d));syncPush()}
 let data=loadData();
 // Migration (uses shared migrateData function)
 migrateData();
