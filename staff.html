@@ -984,10 +984,10 @@ function route(){checkOverdue();const h=location.hash||"#user-login";
 if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
 if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
 if(h==="#user-stamp"){if(!data.session.userId || !getToken()){   data.session.userId="";location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
-if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();return}
-if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
-if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
-if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
+if(h==="#user"){if(!data.session.userId || !getToken()){data.session.userId="";location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();return}
+if(h==="#report-input"){if(!data.session.userId || !getToken()){data.session.userId="";location.hash="#user-login";return}
+if(h==="#report-confirm"){if(!data.session.userId || !getToken()){data.session.userId="";location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
+if(h==="#staff-task-list"){if(!data.session.userId || !getToken()){data.session.userId="";location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
 location.hash="#user-login"}
 window.addEventListener("hashchange",route);
 
