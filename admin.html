@@ -1074,12 +1074,12 @@ function route(){checkOverdue();const h=location.hash||"#admin-login";
 if(h==="#user-login"||h==="#user-stamp"||h==="#user"||h==="#report-input"||h==="#report-confirm"||h==="#staff-task-list"){window.location.href="staff.html"+h;return}
 if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";$("adminLoginPw").value="";return}
 if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed || !getToken()){ data.session.adminAuthed=false;location.hash="#admin-login"; return; }showOnly("adminReportMgmt");renderAdminReportMgmt();return}
-if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.adminReportEditingUserId){location.hash="#admin-report-mgmt";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
+if(h==="#admin-report-detail"){if(!data.session.adminAuthed || !getToken() ||!data.session.adminReportEditingUserId){data.session.adminAuthed=false;location.hash="#admin-login";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
 if(h==="#admin-task-list"){if(!data.session.adminAuthed || !getToken()){ data.session.adminAuthed=false;location.hash="#admin-login"; return; }showOnly("adminTaskList");renderAdminTaskList();return}
 if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed || !getToken()){ data.session.adminAuthed=false;location.hash="#admin-login"; return; }showOnly("adminDropdownEdit");renderDropdownEdit();return}
 if(h==="#admin-month-check"){if(!data.session.adminAuthed || !getToken()){ data.session.adminAuthed=false;location.hash="#admin-login"; return; }showOnly("adminMonthCheck");renderMonthCheck();return}
 if(h==="#admin"){if(!data.session.adminAuthed || !getToken()){ data.session.adminAuthed=false;location.hash="#admin-login"; return; }showOnly("adminHome");renderAdminHome();return}
-if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();return}
+if(h==="#admin-edit"){if(!data.session.adminAuthed || !getToken() ||!data.session.adminEditingUserId){data.session.adminAuthed=false;location.hash="#admin-login";return}showOnly("adminEdit");renderAdminEdit();return}
 location.hash="#admin-login"}
 window.addEventListener("hashchange",route);
 
