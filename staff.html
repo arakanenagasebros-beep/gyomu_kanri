@@ -903,7 +903,8 @@ let data=loadData();
 // Migration (uses shared migrateData function)
 migrateData();
 function getUserHourlyRate(userId){return data.userHourlyRates&&data.userHourlyRates[userId]!=null?data.userHourlyRates[userId]:HOURLY_RATE}
-saveData(data);
+localStorage.setItem(LS_KEY, JSON.stringify(data));
+lastSyncedDataStr = JSON.stringify(data);
 
 function getTaskPrice(name){return data.taskPrices&&data.taskPrices[name]!=null?data.taskPrices[name]:(TASK_PRICES[name]!=null?TASK_PRICES[name]:null)}
 function getTaskTypes(){return data.taskTypes||DEFAULT_TASK_TYPES}
@@ -982,7 +983,7 @@ function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));
 function route(){checkOverdue();const h=location.hash||"#user-login";
 if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
 if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
-if(h==="#user-stamp"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
+if(h==="#user-stamp"){if(!data.session.userId || !getToken()){   data.session.userId="";location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
 if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();return}
 if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
 if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
