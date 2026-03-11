@@ -1050,7 +1050,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           else if(f==="requestDate"||f==="deadline"||f==="completionDate"){inp=document.createElement("input");inp.type="date";inp.value=t[f]||"";}
           else if(f==="taskType"){inp=document.createElement("select");getTaskTypes().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
           else if(f==="employee"){inp=document.createElement("select");getEmployees().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
-          else if(f==="staff"){inp=document.createElement("select");getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
+          else if(f==="staff"){inp=document.createElement("select");const _uo=document.createElement("option");_uo.value="未指定";_uo.textContent="未指定";inp.appendChild(_uo);getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"未指定";}
           else if(f==="textCodes"){inp=document.createElement("input");inp.type="text";inp.value=(t.textCodes||[]).join(", ");}
           else{inp=document.createElement("input");inp.type=f==="manHours"||f==="seqNum"?"number":"text";inp.value=t[f]||"";}
           inp.style.cssText="font-size:11px;padding:2px 4px;border-radius:6px;width:100%;min-width:60px;";
@@ -1170,40 +1170,54 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
 
 /* Task Add/Edit Overlay */
 let editingTaskId=null;
-function openTaskAdd(){editingTaskId=null;$("taskAddTitle").textContent="📑 新規業務追加";
-const now=new Date();const week=addDays(now,7);
-$("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value=ymd(week);$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
-popSel($("taTaskType"),getTaskTypes());popSel($("taEmployee"),getEmployees());
-const staffOpts=getStaffNames();$("taStaff").innerHTML="";staffOpts.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;$("taStaff").appendChild(o)});
-renderTextCodeInputs([""]);$("taskAddOverlay").style.display="block"}
-
-// Admin ①: Auto-set task type to 時給 for 社会人 staff
+function populateStaffSelect(sel, selectedValue){
+  sel.innerHTML="";
+  const unspecified=document.createElement("option");unspecified.value="未指定";unspecified.textContent="未指定";sel.appendChild(unspecified);
+  getStaffNames().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o)});
+  sel.value=selectedValue||"未指定";
+}
 function isStaffShakaijin(staffName){
   const u=Object.values(data.users).find(x=>(x.name||x.id)===staffName);
   return u&&u.userType==="社会人";
 }
-$("taStaff").addEventListener("change",()=>{
+function applyTaskTypeLogic(){
+  const wt=$("taWorkType").value;
   const staffName=$("taStaff").value;
-  if(isStaffShakaijin(staffName)){
+  const isShakaijin=isStaffShakaijin(staffName);
+  // 出勤 or 社会人 → force 時給 and disable
+  if(wt==="出勤"||isShakaijin){
     $("taTaskType").value="時給";
     if(!getTaskTypes().includes("時給"))$("taTaskType").value="その他（時給）";
+    $("taTaskType").disabled=true;
+  } else {
+    $("taTaskType").disabled=false;
   }
-});
+}
+function openTaskAdd(){editingTaskId=null;$("taskAddTitle").textContent="📑 新規業務追加";
+const now=new Date();const week=addDays(now,7);
+$("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value=ymd(week);$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
+popSel($("taTaskType"),getTaskTypes());popSel($("taEmployee"),getEmployees());
+populateStaffSelect($("taStaff"),"未指定");
+applyTaskTypeLogic();
+renderTextCodeInputs([""]);$("taskAddOverlay").style.display="block"}
+
+$("taStaff").addEventListener("change",()=>{applyTaskTypeLogic()});
+$("taWorkType").addEventListener("change",()=>{applyTaskTypeLogic()});
 $("taTaskType").addEventListener("change",()=>{
   const staffName=$("taStaff").value;
+  const wt=$("taWorkType").value;
   const tt=$("taTaskType").value;
-  if(isStaffShakaijin(staffName)&&tt!=="時給"&&tt!=="その他（時給）"){
-    if(!confirm("社会人スタッフは通常「時給」です。変更しますか？")){
-      $("taTaskType").value="時給";
-      if(!getTaskTypes().includes("時給"))$("taTaskType").value="その他（時給）";
-    }
+  if((wt==="出勤"||isStaffShakaijin(staffName))&&tt!=="時給"&&tt!=="その他（時給）"){
+    $("taTaskType").value="時給";
+    if(!getTaskTypes().includes("時給"))$("taTaskType").value="その他（時給）";
   }
 });
 
 function openTaskEdit(t){editingTaskId=t.id;$("taskAddTitle").textContent="📑 業務編集";
 $("taWorkType").value=t.workType;$("taStatus").value=t.status;$("taRequestDate").value=t.requestDate||"";$("taDeadline").value=t.deadline||"";$("taCompletionDate").value=t.completionDate||"";$("taManHours").value=t.manHours||1;$("taContent").value=t.content||"";$("taNote").value=t.notes||"";
 popSel($("taTaskType"),getTaskTypes(),t.taskType);popSel($("taEmployee"),getEmployees(),t.employee);
-const staffOpts=getStaffNames();$("taStaff").innerHTML="";staffOpts.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;$("taStaff").appendChild(o)});$("taStaff").value=t.staff||"";
+populateStaffSelect($("taStaff"),t.staff||"未指定");
+applyTaskTypeLogic();
 renderTextCodeInputs(t.textCodes&&t.textCodes.length?t.textCodes:[""]);$("taskAddOverlay").style.display="block"}
 $("taskAddClose").addEventListener("click",()=>{$("taskAddOverlay").style.display="none"});
 function renderTextCodeInputs(codes){
