@@ -768,17 +768,67 @@ $("btnSaveUserInfo").addEventListener("click", async ()=>{
   if(!nid||!np){showModal({title:"入力不足",big:"⚠️"});return}
   if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
 
-  // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
   try {
-    const resp = await fetch(API_URL, {method: "POST", headers: {"Content-Type": "text/plain"}, body: JSON.stringify({_action: "upsertStaffUser", token: getToken(), id: nid, pw: np, name: nn||nid, userType: nt}), redirect: "follow"});
-    const r = await resp.json();
-    if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
-  } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain"},
+    body: JSON.stringify({
+      _action: "upsertStaffUser",
+      token: getToken(),
+      id: nid,
+      pw: np,
+      name: nn||nid,
+      userType: nt
+    }),
+    redirect: "follow"
+  });
+  const r = await resp.json();
+  if (!r.ok) {
+    showModal({title: "エラー", sub: r.error, big: "🚫"});
+    return;
+  }
 
-  u.name=nn||nid;u.pw=np;u.userType=nt;
-  if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];data.session.adminEditingUserId=nid}
-  saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})
-});
+  // ID変更時は旧IDをGAS側からも削除
+  if (nid !== oldId) {
+    const delResp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: oldId
+      }),
+      redirect: "follow"
+    });
+    const delResult = await delResp.json();
+    if (!delResult.ok) {
+      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
+      return;
+    }
+  }
+} catch(e) {
+  showModal({title: "通信エラー", big: "📡"});
+  return;
+}
+
+u.name=nn||nid;
+u.pw=np;
+u.userType=nt;
+if(nid!==oldId){
+  u.id=nid;
+  data.users[nid]=u;
+  delete data.users[oldId];
+
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+    data.userHourlyRates[nid] = data.userHourlyRates[oldId];
+    delete data.userHourlyRates[oldId];
+  }
+
+  data.session.adminEditingUserId=nid;
+}
+saveData(data);
+renderAdminEdit();
+showModal({title:"更新完了",big:"✅"});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
@@ -1368,17 +1418,41 @@ function renderDropdownEdit(){
     btns.appendChild(eBtn);
     // Delete button
     const dBtn=document.createElement("button");dBtn.className="btn small danger";dBtn.textContent="削除";
-    dBtn.addEventListener("click",()=>{
-      if(!confirm(`「${u.name||u.id}」を削除しますか？\nこのスタッフの全データ（日報・スタンプ等）も削除されます。`))return;
-      // Remove from users
-      delete data.users[u.id];
-      // Remove hourly rate
-      if(data.userHourlyRates&&data.userHourlyRates[u.id])delete data.userHourlyRates[u.id];
-      // Remove work status
-      if(data.staffWorkStatus){const nm=u.name||u.id;if(data.staffWorkStatus[nm])delete data.staffWorkStatus[nm]}
-      saveData(data);renderDropdownEdit();
-      showModal({title:"削除完了",sub:`${u.name||u.id} を削除しました`,big:"🗑️"});
+dBtn.addEventListener("click", async ()=>{
+  if(!confirm(`「${u.name||u.id}」を削除しますか？\nこのスタッフの全データ（日報・スタンプ等）も削除されます。`))return;
+  if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
+
+  try{
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: u.id
+      }),
+      redirect: "follow"
     });
+    const r = await resp.json();
+    if(!r.ok){
+      showModal({title:"削除失敗",sub:r.error||"エラー",big:"🚫"});
+      return;
+    }
+  }catch(e){
+    showModal({title:"通信エラー",sub:"スタッフ削除に失敗しました。",big:"📡"});
+    return;
+  }
+
+  delete data.users[u.id];
+  if(data.userHourlyRates&&data.userHourlyRates[u.id]!=null)delete data.userHourlyRates[u.id];
+  if(data.staffWorkStatus){
+    const nm=u.name||u.id;
+    if(data.staffWorkStatus[nm])delete data.staffWorkStatus[nm];
+  }
+  saveData(data);
+  renderDropdownEdit();
+  showModal({title:"削除完了",sub:`${u.name||u.id} を削除しました`,big:"🗑️"});
+});
     btns.appendChild(dBtn);
     sList.appendChild(div);
   });
@@ -1411,34 +1485,95 @@ $("staffEditSave").addEventListener("click", async () => {
   
   // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
   try {
-    const resp = await fetch(API_URL, {method: "POST", headers: {"Content-Type": "text/plain"}, body: JSON.stringify({_action: "upsertStaffUser", token: getToken(), id: newId, pw: newPw, name: newName||newId, userType: newType}), redirect: "follow"});
-    const r = await resp.json();
-    if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
-  } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
+  const oldId = _staffEditId;
 
-  // Update fields
-  u.name = newName || newId;
-  u.pw = newPw;
-  u.userType = newType;
-  // Update hourly rate
-  if (!isNaN(newRate) && newRate >= 0) { data.userHourlyRates[_staffEditId] = newRate; }
-  // Handle ID change
-  if (newId !== _staffEditId) {
-    u.id = newId;
-    data.users[newId] = u;
-    delete data.users[_staffEditId];
-    if (data.userHourlyRates && data.userHourlyRates[_staffEditId] != null) {
-      data.userHourlyRates[newId] = data.userHourlyRates[_staffEditId];
-      delete data.userHourlyRates[_staffEditId];
-    }
-    _staffEditId = newId;
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain"},
+    body: JSON.stringify({
+      _action: "upsertStaffUser",
+      token: getToken(),
+      id: newId,
+      pw: newPw,
+      name: newName||newId,
+      userType: newType
+    }),
+    redirect: "follow"
+  });
+  const r = await resp.json();
+  if (!r.ok) {
+    showModal({title: "エラー", sub: r.error, big: "🚫"});
+    return;
   }
-  saveData(data);
-  $("staffEditOverlay").style.display = "none";
-  renderDropdownEdit();
-  showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
-});
 
+  // ID変更時は旧IDもGAS側から削除
+  if (newId !== oldId) {
+    const delResp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: oldId
+      }),
+      redirect: "follow"
+    });
+    const delResult = await delResp.json();
+    if (!delResult.ok) {
+      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
+      return;
+    }
+  }
+} catch(e) {
+  showModal({title: "通信エラー", big: "📡"});
+  return;
+}
+
+// Update fields
+u.name = newName || newId;
+u.pw = newPw;
+u.userType = newType;
+
+// Update hourly rate
+if (!isNaN(newRate) && newRate >= 0) {
+  data.userHourlyRates = data.userHourlyRates || {};
+  data.userHourlyRates[_staffEditId] = newRate;
+}
+
+// Handle ID change
+if (newId !== _staffEditId) {
+  const oldId = _staffEditId;
+  u.id = newId;
+  data.users[newId] = u;
+  delete data.users[oldId];
+
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+    data.userHourlyRates[newId] = data.userHourlyRates[oldId];
+    delete data.userHourlyRates[oldId];
+  }
+
+  _staffEditId = newId;
+}
+
+saveData(data);
+$("staffEditOverlay").style.display = "none";
+renderDropdownEdit();
+showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
+
+async function deleteStaffUserOnServer(id){
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain"},
+    body: JSON.stringify({
+      _action: "deleteStaffUser",
+      token: getToken(),
+      id
+    }),
+    redirect: "follow"
+  });
+  return await resp.json();
+}
+  
 function openDdEdit(idx){
   ddEditIdx=idx;
   const name=data.taskTypes[idx];
