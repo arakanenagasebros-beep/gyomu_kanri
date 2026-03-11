@@ -251,16 +251,16 @@ function saveData(d) {
   });
 
   if (masterChanged) {
-    queueAction("updateMaster", {
-      taskTypes: newD.taskTypes,
-      taskPrices: newD.taskPrices,
-      employees: newD.employees,
-      userHourlyRates: newD.userHourlyRates,
-      staffWorkStatus: newD.staffWorkStatus,
-      lockedMonths: newD.lockedMonths,
-      deleteUserId: deletedUid
-    });
-  }
+  queueAction("updateMaster", {
+    taskTypes: newD.taskTypes,
+    taskPrices: newD.taskPrices,
+    employees: newD.employees,
+    userHourlyRates: newD.userHourlyRates,
+    staffWorkStatus: newD.staffWorkStatus,
+    lockedMonths: newD.lockedMonths,
+    deleteUserId: deletedUids
+  });
+}
 
   lastSyncedDataStr = JSON.stringify(d);
 }
