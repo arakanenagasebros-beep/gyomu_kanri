@@ -453,7 +453,7 @@ function buildYearMonthOpts(ySel,mSel,dr,def){const now=new Date();const minY=dr
 function filterReports(reps,y,m,wt){reps=reps||[];return reps.filter(r=>{if(!r.date)return false;const d=new Date(r.date+"T00:00:00");if(y!=="全て"&&d.getFullYear()!==parseInt(y))return false;if(m!=="全て"&&(d.getMonth()+1)!==parseInt(m))return false;if(wt!=="全て"&&r.workType!==wt)return false;return true})}
 
 /* Auto-check overdue tasks */
-function checkOverdue(){const today=ymd(new Date());data.tasks.forEach(t=>{if(t.status==="依頼中"&&t.deadline&&t.deadline<today)t.status="期限超過";});saveData(data)}
+function checkOverdue(){const today=ymd(new Date());let changed=false;data.tasks.forEach(t=>{if(t.status==="依頼中"&&t.deadline&&t.deadline<today){t.status="期限超過";changed=true}});if(changed)saveData(data)}
 
 /* Auto workload status */
 function autoWorkloadStatus(staffName){
