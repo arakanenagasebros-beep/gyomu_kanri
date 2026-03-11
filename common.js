@@ -236,7 +236,7 @@ function saveData(d) {
   });
 
   let masterChanged = false;
-  let deletedUid = null;
+  let deletedUids = [];
   if (JSON.stringify(oldD.taskTypes) !== JSON.stringify(newD.taskTypes)) masterChanged = true;
   if (JSON.stringify(oldD.taskPrices) !== JSON.stringify(newD.taskPrices)) masterChanged = true;
   if (JSON.stringify(oldD.employees) !== JSON.stringify(newD.employees)) masterChanged = true;
@@ -244,7 +244,10 @@ function saveData(d) {
   if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) masterChanged = true;
   if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) masterChanged = true;
   Object.keys(oldUsers).forEach(uid => {
-    if (!newUsers[uid]) { masterChanged = true; deletedUid = uid; }
+  if (!newUsers[uid]) {
+    masterChanged = true;
+    deletedUids.push(uid);
+  }
   });
 
   if (masterChanged) {
@@ -408,18 +411,7 @@ function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r}
 function loadData(){
   const raw=localStorage.getItem(LS_KEY);if(raw){try{return JSON.parse(raw)}catch(e){}}
   const mkU=(id,name,type,stamps,bp,reports)=>({id,name,userType:type,stamps:stamps||{},incentives:{},bonusPoints:0,lastCongrats50:0,lastMonthFirstStamp:"",reports:reports||[],createdAt:Date.now()-Math.random()*86400000*30,proofingIncentives:{},pendingStampRequest:null});
-  const users={
-    "morotomi"  :mkU("morotomi","諸富","社会人"),
-    "osawa"     :mkU("osawa","大澤","社会人"),
-    "ogasawara" :mkU("ogasawara","小笠原","社会人"),
-    "shirakawa" :mkU("shirakawa","白川","学生"),
-    "matsumoto" :mkU("matsumoto","松本","学生"),
-    "kamiko"    :mkU("kamiko","神子","学生"),
-    "tanaka_s"  :mkU("tanaka_s","田中（学生）","学生"),
-    "suzuki"    :mkU("suzuki","鈴木","社会人"),
-    "yamada"    :mkU("yamada","山田","学生"),
-    "ito"       :mkU("ito","伊藤","学生")
-  };
+  const users= {};
   const tasks=[];
   return{users,session:{userId:"",adminAuthed:false,adminEditingUserId:"",adminReportEditingUserId:""},
     tasks,employees:[...DEFAULT_EMPLOYEES],taskTypes:[...DEFAULT_TASK_TYPES],taskPrices:{...TASK_PRICES},staffWorkStatus:{}};
