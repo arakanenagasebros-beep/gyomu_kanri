@@ -36,15 +36,22 @@ async function downloadDriveFile(fileId, fileName){
   setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
 
-async function fetchTodayPasswordForAdmin(){
+async function fetchTodayPasswordForAdmin(forceRefresh=false){
   if(!API_URL) return null;
   const t = getToken();
   if(!t) return null;
+  const cacheKey = "todayPassword_" + ymd(new Date());
+  if(!forceRefresh){
+    const cached = sessionStorage.getItem(cacheKey);
+    if(cached != null) return cached || null;
+  }
   try{
     const resp = await fetch(API_URL + "?action=todayPassword&token=" + encodeURIComponent(t), { redirect:"follow" });
     const r = await resp.json();
     if(!r || !r.ok) return null;
-    return r.password || null;
+    const password = r.password || null;
+    sessionStorage.setItem(cacheKey, password || "");
+    return password;
   }catch(e){
     return null;
   }
@@ -136,6 +143,19 @@ let lastSyncedDataStr = localStorage.getItem(LS_KEY) || "{}";
 let actionQueue = [];
 let isSending = false;
 
+function serializeDataForSync(src) {
+  const clean = JSON.parse(JSON.stringify(src || {}));
+  delete clean.session;
+  delete clean._version;
+  delete clean._updatedAt;
+  return clean;
+}
+
+function saveLocalOnly(d) {
+  localStorage.setItem(LS_KEY, JSON.stringify(d));
+}
+
+
 function queueAction(action, payload) {
   actionQueue.push({ action, payload });
   processQueue();
@@ -173,7 +193,7 @@ async function processQueue() {
 async function syncPush() { return true; }
 
 function sanitizeRemoteData(remoteData) {
-  const clean = { ...remoteData };
+  const clean = JSON.parse(JSON.stringify(remoteData || {}));
   delete clean._version;
   delete clean._updatedAt;
   const localSession = (data && data.session)
@@ -224,21 +244,18 @@ async function syncPull() {
       const remoteVer = result.data._version || 0;
       if (remoteVer > _syncVersion) {
         _syncVersion = remoteVer;
-        const clean = { ...result.data };
-        delete clean._version;
-        delete clean._updatedAt;
+        const clean = sanitizeRemoteData(result.data);
         localStorage.setItem(LS_KEY, JSON.stringify(clean));
         data = JSON.parse(JSON.stringify(clean));
-        lastSyncedDataStr = JSON.stringify(clean);
+        lastSyncedDataStr = JSON.stringify(serializeDataForSync(clean));
         migrateData();
         _lastSyncTime = Date.now();
         updateSyncUI("ok", "同期済み ✓");
-        try { route(); } catch(e) {}
         return true;
       }
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "最新 ✓");
-      return true;
+      return false;
     }
     updateSyncUI("err", "読込エラー");
     return false;
@@ -251,20 +268,20 @@ async function syncPull() {
 }
 
 function saveData(d) {
-  localStorage.setItem(LS_KEY, JSON.stringify(d));
-  const oldD = JSON.parse(lastSyncedDataStr);
-  const newD = d;
+  saveLocalOnly(d);
+  const oldD = JSON.parse(lastSyncedDataStr || "{}");
+  const newD = serializeDataForSync(d);
 
-  const oldTasks = oldD.tasks || [];
-  const newTasks = newD.tasks || [];
-  newTasks.forEach(nT => {
-    const oT = oldTasks.find(t => t.id === nT.id);
+  const oldTasksById = new Map((oldD.tasks || []).map(t => [t.id, t]));
+  const newTasksById = new Map((newD.tasks || []).map(t => [t.id, t]));
+  newTasksById.forEach((nT, id) => {
+    const oT = oldTasksById.get(id);
     if (!oT || JSON.stringify(oT) !== JSON.stringify(nT)) {
       queueAction("updateTask", { task: nT, isDelete: false });
     }
   });
-  oldTasks.forEach(oT => {
-    if (!newTasks.find(t => t.id === oT.id)) {
+  oldTasksById.forEach((oT, id) => {
+    if (!newTasksById.has(id)) {
       queueAction("updateTask", { task: { id: oT.id }, isDelete: true });
     }
   });
@@ -286,26 +303,27 @@ function saveData(d) {
   if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) masterChanged = true;
   if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) masterChanged = true;
   Object.keys(oldUsers).forEach(uid => {
-  if (!newUsers[uid]) {
-    masterChanged = true;
-    deletedUids.push(uid);
-  }
+    if (!newUsers[uid]) {
+      masterChanged = true;
+      deletedUids.push(uid);
+    }
   });
 
   if (masterChanged) {
-  queueAction("updateMaster", {
-    taskTypes: newD.taskTypes,
-    taskPrices: newD.taskPrices,
-    employees: newD.employees,
-    userHourlyRates: newD.userHourlyRates,
-    staffWorkStatus: newD.staffWorkStatus,
-    lockedMonths: newD.lockedMonths,
-    deleteUserId: deletedUids
-  });
+    queueAction("updateMaster", {
+      taskTypes: newD.taskTypes,
+      taskPrices: newD.taskPrices,
+      employees: newD.employees,
+      userHourlyRates: newD.userHourlyRates,
+      staffWorkStatus: newD.staffWorkStatus,
+      lockedMonths: newD.lockedMonths,
+      deleteUserId: deletedUids
+    });
+  }
+
+  lastSyncedDataStr = JSON.stringify(newD);
 }
 
-  lastSyncedDataStr = JSON.stringify(d);
-}
 // ==========================================
 // ▲▲▲ スマート同期システムここまで ▲▲▲
 // ==========================================
@@ -345,7 +363,7 @@ async function forceSyncPull() {
       const clean = sanitizeRemoteData(result.data);
       localStorage.setItem(LS_KEY, JSON.stringify(clean));
       data = JSON.parse(JSON.stringify(clean));
-      lastSyncedDataStr = JSON.stringify(clean);
+      lastSyncedDataStr = JSON.stringify(serializeDataForSync(clean));
       migrateData();
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "同期済み ✓");
@@ -502,7 +520,7 @@ migrateData();
 function getUserHourlyRate(userId){return data.userHourlyRates&&data.userHourlyRates[userId]!=null?data.userHourlyRates[userId]:HOURLY_RATE}
 // ⑩修正: 初回はlocalStorageのみ保存（APIへの差分送信はスキップ）
 localStorage.setItem(LS_KEY, JSON.stringify(data));
-lastSyncedDataStr = JSON.stringify(data);
+lastSyncedDataStr = JSON.stringify(serializeDataForSync(data));
 
 function getTaskPrice(name){return data.taskPrices&&data.taskPrices[name]!=null?data.taskPrices[name]:(TASK_PRICES[name]!=null?TASK_PRICES[name]:null)}
 function getTaskTypes(){return data.taskTypes||DEFAULT_TASK_TYPES}
@@ -531,6 +549,25 @@ function buildYearMonthOpts(ySel,mSel,dr,def){const now=new Date();const minY=dr
   ySel.innerHTML="";const a=document.createElement("option");a.value="全て";a.textContent="全て";ySel.appendChild(a);for(let y=minY;y<=maxY;y++){const o=document.createElement("option");o.value=y;o.textContent=y+"年";ySel.appendChild(o);}if(def)ySel.value=String(now.getFullYear());
   mSel.innerHTML="";const b=document.createElement("option");b.value="全て";b.textContent="全て";mSel.appendChild(b);for(let m=1;m<=12;m++){const o=document.createElement("option");o.value=m;o.textContent=m+"月";mSel.appendChild(o);}if(def)mSel.value=String(now.getMonth()+1)}
 function filterReports(reps,y,m,wt){reps=reps||[];return reps.filter(r=>{if(!r.date)return false;const d=new Date(r.date+"T00:00:00");if(y!=="全て"&&d.getFullYear()!==parseInt(y))return false;if(m!=="全て"&&(d.getMonth()+1)!==parseInt(m))return false;if(wt!=="全て"&&r.workType!==wt)return false;return true})}
+
+/* === WORKLOAD DISPLAY === */
+function renderWorkload(container, filterStaffName) {
+  if (!container) return;
+  container.innerHTML = "";
+  const staffNames = filterStaffName ? [filterStaffName] : getStaffNames();
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
+  staffNames.forEach(name => {
+    const status = autoWorkloadStatus(name);
+    const colorMap = { "空いている": "var(--mint)", "業務が欲しい": "var(--blue)", "まだ余裕あり": "var(--orange)", "厳しい": "var(--red)" };
+    const color = colorMap[status] || "var(--muted)";
+    const chip = document.createElement("div");
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;border:1.5px solid ${color}33;background:${color}11;`;
+    chip.innerHTML = `<span>${escapeHtml(name)}</span><span style="color:${color};">${status}</span>`;
+    grid.appendChild(chip);
+  });
+  container.appendChild(grid);
+}
 
 /* Auto-check overdue tasks */
 function checkOverdue(){const today=ymd(new Date());let changed=false;data.tasks.forEach(t=>{if(t.status==="依頼中"&&t.deadline&&t.deadline<today){t.status="期限超過";changed=true}});if(changed)saveData(data)}

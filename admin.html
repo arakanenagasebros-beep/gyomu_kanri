@@ -6,7 +6,7 @@
   <title>業務管理アプリ - 管理者</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700;900&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./common.css?v=2">
+  <link rel="stylesheet" href="./common.css">
 </head>
 <body>
 <div class="wrap">
@@ -166,7 +166,7 @@
       <div class="bd">
         <div class="form-section"><div class="form-title">ユーザー情報</div>
           <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>ID</label><input id="editUid"></div><div class="form-group"><label>名前</label><input id="editUname"></div></div>
-          <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>PW</label><input id="editUpw" type="text" placeholder="変更時のみ入力"></div><div class="form-group"><label>種別</label><select id="editUserType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
+          <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>PW</label><input id="editUpw" type="text"></div><div class="form-group"><label>種別</label><select id="editUserType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
           <button id="btnSaveUserInfo" class="btn success" style="width:100%;">情報を保存</button></div>
         <div class="statgrid" style="margin-top:12px;">
           <div class="stat"><div class="k">累計</div><div class="v"><span id="eTotal">0</span><span class="u">pt</span></div></div>
@@ -226,11 +226,6 @@
   </div>
 </div>
 
-<div class="lottery-overlay" id="lotteryOverlay" style="display:none;"><div class="lottery-box">
-  <div class="lottery-title">🎰 追加でポイントがもらえるかも？</div><div class="lottery-subtitle">5枚のカードから1枚選んでね！</div>
-  <div class="lottery-cards" id="lotteryCards"></div><div class="lottery-result" id="lotteryResult"></div>
-  <button class="lottery-close hidden" id="lotteryClose">OK！閉じる</button></div></div>
-
 <div class="overlay" id="taskAddOverlay" style="display:none;">
   <div class="modal" style="max-width:600px;">
     <div class="mh"><div><h3 id="taskAddTitle">📑 新規業務追加</h3></div><button class="btn small" id="taskAddClose">閉じる</button></div>
@@ -264,7 +259,7 @@
   <div class="dd-edit-modal" style="max-width:450px;">
     <div class="mh"><div><h3>👤 スタッフ情報編集</h3></div><button class="btn small" id="staffEditClose">閉じる</button></div>
     <div class="mb" style="display:grid;gap:10px;">
-      <div class="row"><div><label>ログインID</label><input id="seId" placeholder="ログインID"></div><div><label>パスワード</label><input id="sePw" type="text" placeholder="変更時のみ入力（新規は必須）"></div></div>
+      <div class="row"><div><label>ログインID</label><input id="seId" placeholder="ログインID"></div><div><label>パスワード</label><input id="sePw" type="text" placeholder="パスワード"></div></div>
       <div class="row"><div><label>スタッフ名</label><input id="seName" placeholder="スタッフ名"></div><div><label>種別</label><select id="seType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
       <div><label>時給（円）</label><input id="seRate" type="text" inputmode="numeric" placeholder="例：1300"></div>
       <button class="btn primary" id="staffEditSave" style="width:100%;">保存 ✅</button>
@@ -272,30 +267,16 @@
   </div>
 </div>
 
-<script src="./config.js?v=2"></script>
-<script src="./optimized_common.js?v=4"></script>
-<script src="./optimized_admin.js?v=4"></script>
+<script src="./config.js"></script>
+<script src="./common.js"></script>
+<script src="./admin.js"></script>
 
 </div>
 
-<!-- API Setup Overlay -->
-<div class="overlay" id="apiSetupOverlay" style="display:none;">
-  <div class="modal" style="max-width:450px;">
-    <div class="mh"><div><h3>⚙ API接続設定</h3><p class="sub">Google Apps Script Web App URL</p></div><button class="btn small" id="apiSetupClose">閉じる</button></div>
-    <div class="mb" style="text-align:left;">
-      <div style="margin-bottom:10px;"><label>API URL</label><input id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec"></div>
-      <div id="apiSetupStatus" style="font-size:12px;margin-bottom:10px;">未設定</div>
-      <div style="display:flex;gap:8px;"><button class="btn primary" id="apiSetupSave" style="flex:1;">接続テスト＆保存</button><button class="btn danger" id="apiSetupClear">切断</button></div>
-    </div>
-  </div>
-</div>
 
 <div class="sync-badge" id="syncBar">
   <span class="sync-dot loading" id="syncDot"></span>
   <span id="syncMsg">接続中...</span>
-  <span id="syncTime" style="font-size:10px;color:var(--muted);margin-left:4px;"></span>
-  <button class="btn small ghost" id="syncSetup" style="font-size:10px;padding:2px 6px;margin-left:4px;">⚙</button>
-  <button class="btn small ghost" id="syncManual" style="font-size:10px;padding:2px 6px;">🔄</button>
 </div>
 
 </body>

@@ -1,194 +1,32 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>業務管理アプリ - スタッフ</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700;900&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./common.css?v=2">
-</head>
-<body>
-<div class="wrap">
-
-<!-- ======= スタッフ側：ログイン ======= -->
-<section id="userAuth" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo">🌟</div><div class="t"><h1>業務管理</h1><p>ログインしてください</p></div></div>
-    <div class="actions"></div></div>
-  <div class="authGrid"><div class="card"><div class="hd"><div><p class="title">ログイン</p><p class="sub">IDとパスワードを入力してね</p></div></div>
-    <div class="bd"><div class="err" id="userAuthErr">ログインに失敗しました。</div>
-      <div style="display:grid;gap:10px;">
-        <div><label>ログインID</label><input id="userLoginId" autocomplete="username" placeholder="IDを入力"></div>
-        <div><label>パスワード</label><input id="userLoginPw" type="password" autocomplete="current-password" placeholder="パスワードを入力"></div>
-        <button id="btnUserLogin" class="btn primary" type="button" style="width:100%;font-size:15px;padding:12px;">ログイン 🚀</button>
-
-
-      </div></div></div></div>
-</section>
-
-<!-- ======= スタッフ側：スタンプ画面（学生） ======= -->
-<section id="userStamp" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo">🌟</div><div class="t"><h1>出勤スタンプカード</h1><p><span id="stampUserName">---</span> さん</p></div></div>
-    <div class="actions"><button class="btn" type="button" id="stampLogout">ログアウト</button></div></div>
-  <div class="stamp-screen">
-    <div class="greeting">おつかれさまです！</div>
-    <div class="date-display" id="stampDate">--月--日（-）</div>
-    <div id="stampRankBadge"></div>
-    <button class="big-stamp-btn" type="button" id="bigStampBtn"><span class="emoji">👆</span><span class="label">出勤スタンプ</span></button>
-    <div id="stampAlreadyMsg" class="hidden" style="color:var(--muted);font-size:14px;font-family:var(--font-display);">✅ 今日はスタンプ済みです！</div>
-    <div class="rank-info" id="stampRankInfo"></div>
-    <div class="stamp-actions">
-      <button class="btn ghost" type="button" id="goToCalendarFromStamp">📅 カレンダー</button>
-      <button class="btn primary" type="button" id="stampGoReport">📝 本日の日報</button>
-      <button class="btn ghost" type="button" id="stampGoReportList">📋 日報一覧</button>
-      <button class="btn ghost" type="button" id="stampGoTaskList">📑 業務一覧</button>
-    </div>
-  </div>
-</section>
-
-<!-- ======= スタッフ側：カレンダー ======= -->
-<section id="userHome" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo">🌟</div><div class="t"><h1>出勤スタンプカード</h1><p><span id="userNameLabel">---</span> さん</p></div></div>
-    <div class="actions"><button class="btn ghost" type="button" id="goToStamp">スタンプ 👆</button><button class="btn" type="button" id="userLogout">ログアウト</button></div></div>
-  <div id="stampDoneBanner" class="stamp-done-banner hidden"><div class="sdb-emoji">✅</div><div class="sdb-text">今日のスタンプ完了！</div><div class="sdb-sub">おつかれさまです！</div></div>
-  <div class="grid">
-    <div class="card"><div class="hd"><div><p class="title">📊 マイステータス</p></div></div>
-      <div class="bd">
-        <div id="userRankArea" style="margin-bottom:12px;"></div>
-        <div class="statgrid">
-          <div class="stat"><div class="k">累計</div><div class="v"><span id="uTotal">0</span><span class="u">pt</span></div></div>
-          <div class="stat"><div class="k">今月</div><div class="v"><span id="uMonth">0</span><span class="u">回</span></div></div>
-        </div>
-        <div id="userProgressArea" style="margin-top:12px;"></div>
-        <button id="btnGoReport" class="btn primary" type="button" style="width:100%;font-size:14px;padding:12px;margin-top:14px;">📝 本日の業務日報を入力</button>
-        <button id="btnGoReportList" class="btn ghost" type="button" style="width:100%;font-size:13px;padding:10px;margin-top:8px;">📋 業務日報一覧</button>
-        <button id="btnGoTaskListFromCal" class="btn ghost" type="button" style="width:100%;font-size:13px;padding:10px;margin-top:8px;">📑 業務一覧</button>
-        <div id="stampRequestArea"></div>
-      </div></div>
-    <div class="card"><div class="bd">
-      <div class="calTop"><div><div class="monthLabel" id="userMonthLabel">----</div></div>
-        <div class="calNav"><button id="uPrev" class="btn small">◀</button><button id="uThis" class="btn primary small">今月</button><button id="uNext" class="btn small">▶</button></div></div>
-      <div class="calGrid" id="userCal"></div>
-      <div id="stampApplyBar" class="hidden"></div>
-      </div></div>
-  </div>
-</section>
-
-<!-- ======= 業務日報入力 ======= -->
-<section id="reportInput" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo" style="background:var(--grad3);transform:rotate(0);">📝</div><div class="t"><h1>業務日報入力</h1><p><span id="reportUserName">---</span> さん</p></div></div>
-    <div class="actions"><button class="btn ghost" type="button" id="reportBackToCal">戻る</button></div></div>
-  <div class="card"><div class="hd"><div><p class="title">📋 業務日報</p></div></div>
-    <div class="bd">
-      <div class="form-section"><div class="form-title">基本情報</div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>日付</label><input type="date" id="rpDate"></div><div class="form-group"><label>勤務形態</label><select id="rpWorkType"><option value="出勤">出勤</option><option value="在宅">在宅</option></select></div></div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>開始</label><div class="time-row"><select id="rpStartH"></select><span>:</span><select id="rpStartM"></select></div></div><div class="form-group"><label>終了</label><div class="time-row"><select id="rpEndH"></select><span>:</span><select id="rpEndM"></select></div></div></div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>休憩</label><select id="rpBreak"></select></div><div class="form-group"><label>勤務時間</label><input id="rpWorkTime" readonly style="background:rgba(255,248,240,.9);font-weight:700;"></div></div></div>
-      <div class="form-section" id="taskSection"><div class="form-title">業務（在宅）</div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>業務種類</label><select id="rpTaskType"></select></div><div class="form-group"><label>工数</label><select id="rpManHours"></select></div></div></div>
-      <div class="form-section" id="officeSection"><div class="form-title">出勤時の情報</div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>交通費</label><input id="rpTransport" type="text" inputmode="numeric" placeholder="例：500"></div><div class="form-group"><label>業務ID</label><select id="rpBizId"></select></div></div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>商品ID</label><select id="rpProductId"></select></div><div class="form-group"><label>サービスID</label><select id="rpServiceId"></select></div></div>
-        <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>テキストコード</label><input id="rpTextCode" type="text" inputmode="numeric" placeholder="テキストコード"></div><div class="form-group"><label>年度</label><select id="rpYear"></select></div></div></div>
-      <div class="form-section"><div class="form-title">業務内容</div><div class="form-group"><label>業務内容</label><textarea id="rpContent" placeholder="業務内容を記入"></textarea></div></div>
-      <button id="btnAddAndContinue" class="btn ghost" type="button" style="width:100%;font-size:13px;padding:10px;margin-top:12px;border-color:rgba(77,150,255,.3);color:var(--blue);">➕ 同日の業務を追加（続けて入力）</button>
-      <button id="btnAddReport" class="btn primary" type="button" style="width:100%;font-size:14px;padding:12px;margin-top:8px;">入力完了 ✅</button>
-    </div></div>
-</section>
-
-<!-- ======= 業務日報確認 ======= -->
-<section id="reportConfirm" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo" style="background:var(--grad3);transform:rotate(0);">📋</div><div class="t"><h1>業務日報確認</h1><p><span id="confirmUserName">---</span> さん</p></div></div>
-    <div class="actions">
-<button class="btn ghost" type="button" id="confirmBackToCal">📅 カレンダー</button>
-<button class="btn ghost" type="button" id="confirmGoTask">📑 業務一覧</button>
-<button class="btn" type="button" id="confirmLogout">ログアウト</button></div></div>
-  <div class="card"><div class="hd"><div><p class="title">📋 業務日報一覧</p></div></div>
-    <div class="bd">
-      <div class="filter-bar"><div class="fg"><label>年</label><select id="rcFilterYear"></select></div><div class="fg"><label>月</label><select id="rcFilterMonth"></select></div><div class="fg"><label>業務形態</label><select id="rcFilterType"><option value="出勤">出勤</option><option value="在宅">在宅</option><option value="全て">全て</option></select></div></div>
-      <div class="summary-bar" id="rcSummaryBar"></div>
-      <div class="tableWrap"><table class="report-table"><thead id="reportThead"></thead><tbody id="reportTbody"></tbody></table></div>
-      <button id="btnNewReport" class="btn primary" type="button" style="width:100%;margin-top:12px;">➕ 新しい日報を追加</button>
-    </div></div>
-</section>
-
-<!-- ======= スタッフ側：業務一覧 ======= -->
-<section id="staffTaskList" class="hidden">
-  <div class="topbar"><div class="brand"><div class="logo" style="background:var(--grad3);transform:rotate(0);">📑</div><div class="t"><h1>業務一覧</h1><p><span id="stlUserName">---</span> さん</p></div></div>
-    <div class="actions">
-<button class="btn ghost" type="button" id="stlBackToReport" style="display:none;">📋 業務日報</button>
-<button class="btn ghost" type="button" id="stlBack">📅 カレンダー</button>
-<button class="btn" type="button" id="stlLogout">ログアウト</button></div></div>
-  <div class="card"><div class="hd"><div><p class="title">📊 稼働状況</p></div></div><div class="bd" id="stlWorkloadArea"></div></div>
-  <div class="card"><div class="hd"><div><p class="title">📑 業務一覧</p></div>
-    <div><button class="btn ghost small" id="stlPriceListToggle">💰 業務単価一覧</button></div></div>
-    <div class="bd">
-      <div id="stlPriceListArea" class="hidden"></div>
-      <div class="filter-bar">
-        <div class="fg"><label>日付種類</label><select id="stlDateType"><option value="requestDate">依頼日</option><option value="deadline">期限日</option><option value="completionDate">完了日</option></select></div>
-        <div class="fg"><label>年</label><select id="stlYear"></select></div>
-        <div class="fg"><label>月</label><select id="stlMonth"></select></div>
-        <div class="fg"><label>担当ｽﾀｯﾌ</label><select id="stlStaff"></select></div>
-        <div class="fg"><label>状況</label><select id="stlStatus"><option value="全て">全て</option><option value="依頼前">依頼前</option><option value="依頼中">依頼中</option><option value="期限超過">期限超過</option><option value="完了">完了</option><option value="キャンセル">キャンセル</option></select></div>
-      </div>
-      <div class="tableWrap"><table><thead id="stlThead"></thead><tbody id="stlTbody"></tbody></table></div>
-    </div></div>
-</section>
-</div>
-
-<!-- Overlays -->
-<div class="overlay" id="overlay"><div class="modal"><div class="mh"><div><h3 id="mTitle">---</h3><div class="sub" id="mSub">---</div></div><button id="mClose" class="btn small">閉じる</button></div>
-  <div class="mb"><p id="mBody">---</p><div class="celebrate"><p class="big" id="mBig">🎉</p><div class="small" id="mSmall">---</div></div></div></div></div>
-
-<div class="lottery-overlay" id="lotteryOverlay"><div class="lottery-box">
-  <div class="lottery-title">🎰 追加でポイントがもらえるかも？</div><div class="lottery-subtitle">5枚のカードから1枚選んでね！</div>
-  <div class="lottery-cards" id="lotteryCards"></div><div class="lottery-result" id="lotteryResult"></div>
-  <button class="lottery-close hidden" id="lotteryClose">OK！閉じる</button></div></div>
-
-<div class="overlay" id="fileOverlay" style="display:none;">
-  <div class="modal" style="max-width:400px;">
-    <div class="mh"><div><h3>📎 ファイル提出</h3><p class="sub">複数ファイルを添付できます</p></div><button class="btn small" id="fileOverlayClose">閉じる</button></div>
-    <div class="mb">
-      <div class="drop-zone" id="dropZone"><div class="dz-icon">📂</div><div class="dz-text">ファイルをドラッグ＆ドロップ</div><div class="dz-file" id="dzFileName"></div>
-        <input type="file" id="fileInput" multiple style="display:none;"></div>
-      <div class="file-list" id="fileList"></div>
-      <button class="btn success" id="fileSubmitBtn" style="width:100%;margin-top:12px;" disabled>完了 ✅</button>
-      <button class="btn primary" id="fileSubmitDirectBtn" type="button" style="width:100%;margin-top:10px;">提出（ファイルなしでも完了）</button>
-    </div>
-  </div>
-</div>
-
-<script src="./config.js?v=2"></script>
-<script src="./common.js?v=2"></script>
-<script>
-
-/* === VIEWS (staff-specific) === */
-const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHome"),reportInput:$("reportInput"),reportConfirm:$("reportConfirm"),staffTaskList:$("staffTaskList"),adminAuth:_noop,adminReportMgmt:_noop,adminReportDetail:_noop,adminTaskList:_noop,adminDropdownEdit:_noop,adminHome:_noop,adminEdit:_noop,adminMonthCheck:_noop};
+/* === VIEWS (admin-specific) === */
+const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
 
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();closeLayer(document.getElementById("fileOverlay"));closeLayer(document.getElementById("taskAddOverlay"));closeLayer(document.getElementById("ddEditOverlay"));closeLayer(document.getElementById("apiSetupOverlay"));closeLayer(document.getElementById("staffEditOverlay"));}});
 $("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
-function route(){checkOverdue();const h=location.hash||"#user-login";
-if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
-if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
-if(h==="#user-stamp"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
-if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");forceSyncPull().then(()=>{renderUserHome()});return}
-if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
-if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
-if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
-location.hash="#user-login"}
+function openLayer(el){ if(!el) return; el.style.display="block"; }
+function closeLayer(el){ if(!el) return; el.style.display="none"; }
+function closeAdminTransientOverlays(){ closeLayer($("staffEditOverlay")); closeLayer($("ddEditOverlay")); closeLayer($("apiSetupOverlay")); }
+function route(){checkOverdue();closeAdminTransientOverlays();const h=location.hash||"#admin-login";
+if(h==="#user-login"||h==="#user-stamp"||h==="#user"||h==="#report-input"||h==="#report-confirm"||h==="#staff-task-list"){window.location.href="staff.html"+h;return}
+if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";$("adminLoginPw").value="";return}
+if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminReportMgmt");renderAdminReportMgmt();return}
+if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.adminReportEditingUserId){location.hash="#admin-report-mgmt";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
+if(h==="#admin-task-list"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminTaskList");renderAdminTaskList();return}
+if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminDropdownEdit");renderDropdownEdit();return}
+if(h==="#admin-month-check"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminMonthCheck");renderMonthCheck();return}
+if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminHome");renderAdminHome();syncPull().then(changed=>{if(changed && location.hash==="#admin" && data.session.adminAuthed) renderAdminHome()});return}
+if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();syncPull().then(changed=>{if(changed && location.hash==="#admin-edit" && data.session.adminAuthed && data.session.adminEditingUserId) renderAdminEdit()});return}
+location.hash="#admin-login"}
 window.addEventListener("hashchange",route);
 
 /* === NAV === */
-$("gotoAdminAuth").addEventListener("click",()=>{window.location.href="admin.html#admin-login";});
-$("gotoUserAuth").addEventListener("click",()=>location.hash="#user-login");
-function doLogout(){data.session.userId="";clearToken();saveData(data);location.hash="#user-login"}
-function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveData(data);location.hash="#admin-login"}
-$("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventListener("click",doLogout);$("confirmLogout").addEventListener("click",doLogout);$("stlLogout").addEventListener("click",doLogout);
+function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
+function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";closeAdminTransientOverlays();saveLocalOnly(data);location.hash="#admin-login"}
 $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEventListener("click",doAdminLogout);$("atlLogout").addEventListener("click",doAdminLogout);$("ddeLogout").addEventListener("click",doAdminLogout);
 
 // Login
@@ -241,8 +79,8 @@ $("btnGoReport").addEventListener("click",()=>{editingReportIdx=-1;rpTransportLo
 $("btnGoReportList").addEventListener("click",()=>location.hash="#report-confirm");
 $("btnGoTaskListFromCal").addEventListener("click",()=>location.hash="#staff-task-list");
 $("reportBackToCal").addEventListener("click",()=>{
-  if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveData(data);editingReportIdx=-1;location.hash="#admin-report-detail";return}
-  const u=data.users[data.session.userId];location.hash=u&&u.userType==="社会人"?"#report-confirm":"#user"});
+  if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveLocalOnly(data);editingReportIdx=-1;location.hash="#admin-report-detail";return}
+  const u=data.users[data.session.userId];window.location.href="staff.html"+(u&&u.userType==="社会人"?"#report-confirm":"#user")});
 $("confirmBackToCal").addEventListener("click",()=>{const u=data.users[data.session.userId];if(u&&u.userType==="社会人")return;location.hash="#user"});
 $("confirmGoTask").addEventListener("click",()=>location.hash="#staff-task-list");
 $("btnNewReport").addEventListener("click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
@@ -255,8 +93,7 @@ const tabNav=(rm,sm,tl,dd,mc)=>{$(rm).addEventListener("click",()=>location.hash
 tabNav("tabRM","tabSM","tabTL","tabDD","tabMC");tabNav("tabRM2","tabSM2","tabTL2","tabDD2","tabMC2");tabNav("tabRM3","tabSM3","tabTL3","tabDD3","tabMC3");tabNav("tabRM4","tabSM4","tabTL4","tabDD4","tabMC4");
 
 /* === STAMP SCREEN === */
-function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
-u.stamps = u.stamps || {};
+function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
 const now=new Date(),total=countTotal(u),stamped=!!u.stamps[ymd(now)];
 $("stampUserName").textContent=u.name||u.id;$("stampDate").textContent=`${now.getMonth()+1}月${now.getDate()}日（${dowJa(now)}）`;
 renderRankBadge($("stampRankBadge"),total);renderProgress($("stampRankInfo"),total);
@@ -300,8 +137,7 @@ $("uThis").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date()
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
-function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
-u.stamps = u.stamps || {};
+function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
@@ -405,7 +241,7 @@ if(wt==="在宅"){e.taskType=$("rpTaskType").value;e.manHours=$("rpManHours").va
 e.content=$("rpContent").value;e.proofCount=0;
 if(editingReportIdx>=0){e.proofCount=u.reports[editingReportIdx].proofCount||0;u.reports[editingReportIdx]=e}else u.reports.push(e);
 saveData(data);editingReportIdx=-1;
-if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveData(data);location.hash="#admin-report-detail"}
+if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveLocalOnly(data);location.hash="#admin-report-detail"}
 else{location.hash="#report-confirm"}});
 
 /* Add and continue same-day */
@@ -472,7 +308,7 @@ const td=document.createElement("td");if(i===1)td.innerHTML=`<span class="tag">$
 else if(i===3){const cls=u.userType==="社会人"?"tag shakaijin":"tag student";td.innerHTML=`<span class="${cls}">${escapeHtml(u.userType||"学生")}</span>`}
 else{td.textContent=c;if(i===9){td.style.fontWeight="900";td.style.color="var(--pink)"}}tr.appendChild(td)});
 const tdE=document.createElement("td");const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="詳細";
-btn.addEventListener("click",()=>{data.session.adminReportEditingUserId=u.id;saveData(data);ardInit=false;location.hash="#admin-report-detail"});
+btn.addEventListener("click",()=>{data.session.adminReportEditingUserId=u.id;saveLocalOnly(data);ardInit=false;location.hash="#admin-report-detail"});
 tdE.appendChild(btn);tr.appendChild(tdE);tb.appendChild(tr)});$("armMeta").textContent=`${users.length}名`}
 ["armFilterYear","armFilterMonth","armFilterType","armFilterUserType"].forEach(id=>$(id).addEventListener("change",doRenderARM));
 
@@ -522,17 +358,19 @@ tr:nth-child(even){background:#F2F2F2;}
 
 // User add (moved here)
 $("btnAddUser").addEventListener("click", async ()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
-if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}if(data.users[id]){showModal({title:"ID重複",big:"🧩"});return}
+if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}
 if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
   const r=await resp.json();
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
+// ローカルデータにはPWを保存しない（全ての空箱を初期化して作る）
   data.users=data.users||{};
   const existing = data.users[id] || {};
   data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
-  saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
-  renderAdminReportMgmt();showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
+  saveData(data);
+  $("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
+  showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
 }catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}
 });
 
@@ -631,7 +469,7 @@ const sh=parseInt(r.startH)||0,sm=parseInt(r.startM)||0,eh=parseInt(r.endH)||0,e
 let d=(eh*60+em)-(sh*60+sm)-brk;if(d<0)d=0;r.workTime=`${Math.floor(d/60)}時間${d%60>0?d%60+"分":""}`;saveData(data);doRenderARD()};
 inp.addEventListener("blur",save);inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&field!=="content"){e.preventDefault();inp.blur()}})};
 ["ardFilterYear","ardFilterMonth","ardFilterType"].forEach(id=>$(id).addEventListener("change",doRenderARD));
-$("ardBack").addEventListener("click",()=>{data.session.adminReportEditingUserId="";ardInit=false;saveData(data);location.hash="#admin-report-mgmt"});
+$("ardBack").addEventListener("click",()=>{data.session.adminReportEditingUserId="";ardInit=false;saveLocalOnly(data);location.hash="#admin-report-mgmt"});
 $("ardExport").addEventListener("click",()=>{const u=data.users[data.session.adminReportEditingUserId];if(!u)return;const y=$("ardFilterYear").value,m=$("ardFilterMonth").value,wt=$("ardFilterType").value;const f=filterReports(u.reports,y,m,wt);
 let csv="\uFEFF#,日付,形態,開始,終了,休憩,勤務,給与,交通費,業務ID,商品ID,ｻｰﾋﾞｽID,ﾃｷｽﾄｺｰﾄﾞ,年度,業務種類,工数,内容,校正回数,校正金額\n";
 f.forEach((r,i)=>{const sal=Math.round(calcReportSalary(r,u.id));const pc=r.proofCount||0;csv+=[i+1,r.date,r.workType,`${r.startH}:${r.startM}`,`${r.endH}:${r.endM}`,r.breakTime,r.workTime,sal,r.transport||0,r.bizId||"",r.productId||"",r.serviceId||"",r.textCode||"",r.year||"",r.taskType||"",r.manHours||"",`"${(r.content||"").replace(/"/g,'""')}"`,pc,pc*500].join(",")+"\n"});
@@ -639,9 +477,9 @@ const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.cre
 
 /* === ADMIN STAMP HOME === */
 $("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
-$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
+$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
-function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin().then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
+function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin(false).then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
 const tr=document.createElement("tr");[String(idx+1),null,u.name||u.id,null,countThisWeek(u,now)+"回",countThisMonth(u,now)+"回",total+"pt",null,rank.yen+"円",sInc.toLocaleString()+"円"].forEach((c,i)=>{
 const td=document.createElement("td");if(i===1)td.innerHTML=`<span class="tag">${escapeHtml(u.id)}</span>`;
@@ -652,12 +490,12 @@ else td.textContent=c;tr.appendChild(td)});
 const tdReq=document.createElement("td");
 if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
   const reqBadge=document.createElement("span");reqBadge.className="stamp-request-badge";reqBadge.style.cssText="font-size:9px;cursor:pointer;";reqBadge.textContent="📨 申請中";
-  reqBadge.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveData(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+  reqBadge.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
   tdReq.appendChild(reqBadge);
 } else {tdReq.textContent="―"}
 tr.appendChild(tdReq);
 const tdE=document.createElement("td");const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="編集";
-btn.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveData(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+btn.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
 tdE.appendChild(btn);tr.appendChild(tdE);tb.appendChild(tr)});$("adminMeta").textContent=`${users.length}名`}
 
 /* === ADMIN EDIT === */
@@ -665,47 +503,85 @@ let editMonthCursor=startOfMonth(new Date());
 $("ePrev").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,-1);renderAdminEdit()});
 $("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
 $("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
-$("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveData(data);location.hash="#admin"});
-$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
-$("btnSaveUserInfo").addEventListener("click", async ()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
-if(!nid||!np){showModal({title:"入力不足",big:"⚠️"});return}if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
-if(API_URL){
+$("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
+$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
+$("btnSaveUserInfo").addEventListener("click", async ()=>{
+  const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;
+  const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
+  if(!nid){showModal({title:"入力不足",sub:"IDは必須です",big:"⚠️"});return}
+  if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
+
   try {
-    const resp = await fetch(API_URL, {
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain"},
+    body: JSON.stringify({
+      _action: "upsertStaffUser",
+      token: getToken(),
+      id: nid,
+      pw: np,
+      name: nn||nid,
+      userType: nt
+    }),
+    redirect: "follow"
+  });
+  const r = await resp.json();
+  if (!r.ok) {
+    showModal({title: "エラー", sub: r.error, big: "🚫"});
+    return;
+  }
+
+  // ID変更時は旧IDをGAS側からも削除
+  if (nid !== oldId) {
+    const delResp = await fetch(API_URL, {
       method: "POST",
       headers: {"Content-Type": "text/plain"},
-      body: JSON.stringify({_action: "upsertStaffUser", token: getToken(), id: nid, pw: np, name: nn||nid, userType: nt}),
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: oldId
+      }),
       redirect: "follow"
     });
-    const r = await resp.json();
-    if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
-    if (nid !== oldId) {
-      const delResp = await fetch(API_URL, {
-        method: "POST",
-        headers: {"Content-Type": "text/plain"},
-        body: JSON.stringify({_action: "deleteStaffUser", token: getToken(), id: oldId}),
-        redirect: "follow"
-      });
-      const delResult = await delResp.json();
-      if (!delResult.ok) { showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"}); return; }
+    const delResult = await delResp.json();
+    if (!delResult.ok) {
+      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
+      return;
     }
-  } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
+  }
+} catch(e) {
+  showModal({title: "通信エラー", big: "📡"});
+  return;
 }
-u.name=nn||nid;u.pw=np;u.userType=nt;
-if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
-  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) { data.userHourlyRates[nid] = data.userHourlyRates[oldId]; delete data.userHourlyRates[oldId]; }
-  data.session.adminEditingUserId=nid}
-saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
+
+u.name=nn||nid;
+if(np)u.pw=np;
+u.userType=nt;
+if(nid!==oldId){
+  u.id=nid;
+  data.users[nid]=u;
+  delete data.users[oldId];
+
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+    data.userHourlyRates[nid] = data.userHourlyRates[oldId];
+    delete data.userHourlyRates[oldId];
+  }
+
+  data.session.adminEditingUserId=nid;
+}
+saveData(data);
+renderAdminEdit();
+showModal({title:"更新完了",big:"✅"});
+});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
-$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
+$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value="";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
 // Show pending stamp request info
 const hasPending=u.pendingStampRequest&&u.pendingStampRequest.status==="pending";
 if(hasPending){
-  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:true,
-    onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()},
+  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:false,onDayClick:null,
     pendingChanges:u.pendingStampRequest.stamps,originalStamps:u.stamps});
 } else {
   renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.stamps,clickable:true,onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()}});
@@ -732,60 +608,87 @@ if(hasPending){
 }
 
 /* === CALENDAR === */
-function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendingChanges,originalStamps}){mount.innerHTML="";
-["月","火","水","木","金","土","日"].forEach(w=>{const d=document.createElement("div");d.className="dow";d.textContent=w;mount.appendChild(d)});
-const first=startOfMonth(monthCursor),firstDow=(first.getDay()+6)%7,start=new Date(first);start.setDate(start.getDate()-firstDow);const today=new Date();
-for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const inM=d.getMonth()===monthCursor.getMonth(),key=ymd(d);const sv=stampedMap&&stampedMap[key];const stamped=!!sv;const isEmg=sv==="emergency";
-const cell=document.createElement("div");cell.className="day"+(inM?"":" muted")+(clickable?" clickable":"");
-const top=document.createElement("div");top.className="n";const num=document.createElement("span");num.textContent=d.getDate();top.appendChild(num);
-if(isSameDay(d,today)){const b=document.createElement("span");b.className="badgeToday";b.textContent="TODAY";top.appendChild(b)}
-const meta=document.createElement("div");meta.className="dayMeta";meta.textContent=dowJa(d)+"曜";
-const st=document.createElement("div");
-// Check if this is a pending change
-const isPendingAdd=pendingChanges&&originalStamps&&pendingChanges[key]&&!originalStamps[key];
-const isPendingRemove=pendingChanges&&originalStamps&&!pendingChanges[key]&&originalStamps[key];
-const isPendingChange=pendingChanges&&originalStamps&&pendingChanges[key]&&originalStamps[key]&&pendingChanges[key]!==originalStamps[key];
-if(isPendingAdd){st.className="stamp pending";st.textContent="＋"}
-else if(isPendingRemove){st.className="stamp pending-remove";st.textContent="−"}
-else if(isPendingChange){st.className="stamp pending";st.textContent=pendingChanges[key]==="emergency"?"⚡":"✓"}
-else if(isEmg){st.className="stamp emergency";st.textContent="⚡"}
-else{st.className="stamp"+(stamped?" on":"");st.textContent=stamped?"✓":""}
-cell.appendChild(top);cell.appendChild(meta);cell.appendChild(st);if(clickable&&onDayClick)cell.addEventListener("click",()=>onDayClick(d));mount.appendChild(cell)}}
+function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendingChanges,originalStamps}){
+  const monthKey = `${monthCursor.getFullYear()}-${monthCursor.getMonth()}`;
+  const today = new Date();
+  const state = mount._calendarState || {};
 
-/* ================================================================ */
-/* === TASK LIST (CORE) === */
-/* ================================================================ */
+  function getStampState(key){
+    const sv = stampedMap && stampedMap[key];
+    const isEmg = sv === "emergency";
+    const stamped = !!sv;
+    const isPendingAdd = pendingChanges && originalStamps && pendingChanges[key] && !originalStamps[key];
+    const isPendingRemove = pendingChanges && originalStamps && !pendingChanges[key] && originalStamps[key];
+    const isPendingChange = pendingChanges && originalStamps && pendingChanges[key] && originalStamps[key] && pendingChanges[key] !== originalStamps[key];
+    if (isPendingAdd) return { cls: "stamp pending", text: "＋" };
+    if (isPendingRemove) return { cls: "stamp pending-remove", text: "−" };
+    if (isPendingChange) return { cls: "stamp pending", text: pendingChanges[key] === "emergency" ? "⚡" : "✓" };
+    if (isEmg) return { cls: "stamp emergency", text: "⚡" };
+    return { cls: "stamp" + (stamped ? " on" : ""), text: stamped ? "✓" : "" };
+  }
 
-// Workload rendering
-function renderWorkload(container,staffFilter){
-  container.innerHTML="";
-  const staffNames=staffFilter?[staffFilter]:getStaffNames();
-  const grid=document.createElement("div");grid.className="workload-grid";
-  function applyWlColor(sel){sel.classList.remove("wl-want","wl-ok","wl-busy");
-    if(sel.value==="業務が欲しい")sel.classList.add("wl-want");
-    else if(sel.value==="まだ余裕あり")sel.classList.add("wl-ok");
-    else if(sel.value==="厳しい")sel.classList.add("wl-busy")}
-  staffNames.forEach(name=>{
-    const active=data.tasks.filter(t=>t.staff===name&&(t.status==="依頼中"||t.status==="期限超過"));
-    const irai=active.filter(t=>t.status==="依頼中").length;
-    const kigen=active.filter(t=>t.status==="期限超過").length;
-    const autoSt=autoWorkloadStatus(name);
-    const card=document.createElement("div");card.className="workload-card";
-    card.innerHTML=`<div class="wl-name">${escapeHtml(name)}</div><div class="wl-counts">依頼中: <span style="color:var(--blue)">${irai}</span>　期限超過: <span style="color:var(--red)">${kigen}</span></div>`;
-    const sel=document.createElement("select");
-    const tp=getUserTypeByStaffName(name);
-    const opts=(tp==="社会人")?["空いている","まだ余裕あり","厳しい"]:["業務が欲しい","まだ余裕あり","厳しい"];
-    opts.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
-    sel.value=autoSt;applyWlColor(sel);
-    if(tp==="社会人"){
-      sel.disabled=true;
-    } else {
-      sel.addEventListener("change",()=>{data.staffWorkStatus[name]=sel.value;saveData(data);applyWlColor(sel)});
+  const rebuild = state.monthKey !== monthKey || !state.cells;
+  if (rebuild) {
+    mount.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    ["月","火","水","木","金","土","日"].forEach(w => {
+      const d = document.createElement("div");
+      d.className = "dow";
+      d.textContent = w;
+      frag.appendChild(d);
+    });
+    const first = startOfMonth(monthCursor);
+    const firstDow = (first.getDay() + 6) % 7;
+    const start = new Date(first);
+    start.setDate(start.getDate() - firstDow);
+    const cells = {};
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const inM = d.getMonth() === monthCursor.getMonth();
+      const key = ymd(d);
+      const cell = document.createElement("div");
+      cell.className = "day" + (inM ? "" : " muted") + (clickable ? " clickable" : "");
+      const top = document.createElement("div");
+      top.className = "n";
+      const num = document.createElement("span");
+      num.textContent = d.getDate();
+      top.appendChild(num);
+      if (isSameDay(d, today)) {
+        const b = document.createElement("span");
+        b.className = "badgeToday";
+        b.textContent = "TODAY";
+        top.appendChild(b);
+      }
+      const meta = document.createElement("div");
+      meta.className = "dayMeta";
+      meta.textContent = dowJa(d) + "曜";
+      const st = document.createElement("div");
+      const s = getStampState(key);
+      st.className = s.cls;
+      st.textContent = s.text;
+      cell.appendChild(top);
+      cell.appendChild(meta);
+      cell.appendChild(st);
+      if (clickable && onDayClick) cell.addEventListener("click", () => onDayClick(d));
+      frag.appendChild(cell);
+      cells[key] = { cell, stampEl: st };
     }
-    card.appendChild(sel);grid.appendChild(card);
+    mount.appendChild(frag);
+    mount._calendarState = { monthKey, cells };
+    return;
+  }
+
+  Object.keys(state.cells).forEach(key => {
+    const ref = state.cells[key];
+    const s = getStampState(key);
+    if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
+    if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
+    ref.cell.classList.toggle("clickable", !!clickable);
+    if (!clickable) ref.cell.onclick = null;
   });
-  container.appendChild(grid);
 }
+
 
 // Build task filter selects
 function buildTaskFilterSelects(ySel,mSel,staffSel,empSel){
@@ -876,7 +779,15 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}))});
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              downloadTaskFiles(t);
+            }
+          });
           wrap.appendChild(dlBtn);
         }
         const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
@@ -888,7 +799,15 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const span=document.createElement("span");span.style.fontSize="10px";span.style.color="var(--mint)";span.textContent="✅ 完了";wrap.appendChild(span);
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}))});
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              downloadTaskFiles(t);
+            }
+          });
           wrap.appendChild(dlBtn);
         }
         const revertBtn=document.createElement("button");revertBtn.className="btn danger small";revertBtn.textContent="↩ 依頼中に戻す";
@@ -909,7 +828,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
           dlBtn.addEventListener("click",()=>{
-            t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+            downloadTaskFiles(t);
           });wrap.appendChild(dlBtn);
         }
         // Submit button
@@ -931,9 +850,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       } else if(t.status==="依頼前"){
         tdSub.textContent="―";
       } else {
-        if(t.fileNames&&t.fileNames.length){
-        const links=(t.fileIds&&t.fileIds.length)?t.fileNames.map((n,i)=>{const fid=t.fileIds[i];return fid?`<a href="#" class="fileLink" data-fileid="${fid}" data-filename="${escapeHtml(n)}">${escapeHtml(n)}</a>`:escapeHtml(n);}).join(", "):escapeHtml(t.fileNames.join(", "));
-        tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${links}</span>`}
+        if(t.fileNames&&t.fileNames.length){tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${escapeHtml(t.fileNames.join(", "))}</span>`}
       }
     }
     tr.appendChild(tdSub);
@@ -953,7 +870,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           else if(f==="requestDate"||f==="deadline"||f==="completionDate"){inp=document.createElement("input");inp.type="date";inp.value=t[f]||"";}
           else if(f==="taskType"){inp=document.createElement("select");getTaskTypes().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
           else if(f==="employee"){inp=document.createElement("select");getEmployees().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
-          else if(f==="staff"){inp=document.createElement("select");getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
+          else if(f==="staff"){inp=document.createElement("select");const _uo=document.createElement("option");_uo.value="未指定";_uo.textContent="未指定";inp.appendChild(_uo);getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"未指定";}
           else if(f==="textCodes"){inp=document.createElement("input");inp.type="text";inp.value=(t.textCodes||[]).join(", ");}
           else{inp=document.createElement("input");inp.type=f==="manHours"||f==="seqNum"?"number":"text";inp.value=t[f]||"";}
           inp.style.cssText="font-size:11px;padding:2px 4px;border-radius:6px;width:100%;min-width:60px;";
@@ -1087,6 +1004,7 @@ function applyTaskTypeLogic(){
   const wt=$("taWorkType").value;
   const staffName=$("taStaff").value;
   const isShakaijin=isStaffShakaijin(staffName);
+  // 出勤 or 社会人 → force 時給 and disable
   if(wt==="出勤"||isShakaijin){
     $("taTaskType").value="時給";
     if(!getTaskTypes().includes("時給"))$("taTaskType").value="その他（時給）";
@@ -1236,6 +1154,7 @@ let ddEditIdx=-1;
 let ddEditType=""; // "taskType" or ""
 function renderDropdownEdit(){
   renderAdminNotifications();
+  renderAdminCreds();
   // Task Types with prices
   const ttList=$("ddTaskTypeList");ttList.innerHTML="";
   getTaskTypes().forEach((t,i)=>{
@@ -1256,23 +1175,162 @@ function renderDropdownEdit(){
     const btns=div.querySelector(".dd-btns");
     const btn=document.createElement("button");btn.className="btn danger small";btn.textContent="削除";
     btn.addEventListener("click",()=>{if(!confirm(`「${data.employees[i]}」を削除しますか？`))return;data.employees.splice(i,1);saveData(data);renderDropdownEdit()});btns.appendChild(btn);eList.appendChild(div)});
-  // Staff hourly rates
+  // Staff list with full edit & delete
   const sList=$("ddStaffList");sList.innerHTML="";
   Object.values(data.users).sort((a,b)=>{const aT=(a.userType||"学生")==="社会人"?0:1;const bT=(b.userType||"学生")==="社会人"?0:1;return aT!==bT?aT-bT:(a.createdAt||0)-(b.createdAt||0)}).forEach(u=>{
     const hr=getUserHourlyRate(u.id);const cls=u.userType==="社会人"?"tag shakaijin":"tag student";
     const div=document.createElement("div");div.className="dd-item";
-    div.innerHTML=`<div class="dd-info"><span>${escapeHtml(u.name||u.id)}</span> <span class="${cls}" style="font-size:10px;">${escapeHtml(u.userType||"学生")}</span><div class="dd-price">${hr.toLocaleString()}円/h</div></div><div class="dd-btns"></div>`;
+    div.innerHTML=`<div class="dd-info"><span>${escapeHtml(u.name||u.id)}</span> <span class="${cls}" style="font-size:10px;">${escapeHtml(u.userType||"学生")}</span><div class="dd-price">${hr.toLocaleString()}円/h</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">ID: ${escapeHtml(u.id)}</div></div><div class="dd-btns"></div>`;
     const btns=div.querySelector(".dd-btns");
+    // Edit button - opens overlay with full staff fields
     const eBtn=document.createElement("button");eBtn.className="btn small ghost";eBtn.textContent="編集";
-    eBtn.addEventListener("click",()=>{
-      const newRate=prompt(`${u.name||u.id} の時給（円）`,String(hr));
-      if(newRate===null)return;const val=parseInt(newRate);
-      if(isNaN(val)||val<0){showModal({title:"無効な値です",big:"⚠️"});return}
-      data.userHourlyRates[u.id]=val;saveData(data);renderDropdownEdit();
-      showModal({title:"時給更新",sub:`${u.name||u.id}: ${val.toLocaleString()}円/h`,big:"✅"});
-    });btns.appendChild(eBtn);sList.appendChild(div);
+    eBtn.addEventListener("click",()=>openStaffEdit(u.id));
+    btns.appendChild(eBtn);
+    // Delete button
+    const dBtn=document.createElement("button");dBtn.className="btn small danger";dBtn.textContent="削除";
+dBtn.addEventListener("click", async ()=>{
+  if(!confirm(`「${u.name||u.id}」を削除しますか？\nこのスタッフの全データ（日報・スタンプ等）も削除されます。`))return;
+  if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
+
+  try{
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: u.id
+      }),
+      redirect: "follow"
+    });
+    const r = await resp.json();
+    if(!r.ok){
+      showModal({title:"削除失敗",sub:r.error||"エラー",big:"🚫"});
+      return;
+    }
+  }catch(e){
+    showModal({title:"通信エラー",sub:"スタッフ削除に失敗しました。",big:"📡"});
+    return;
+  }
+
+  delete data.users[u.id];
+  if(data.userHourlyRates&&data.userHourlyRates[u.id]!=null)delete data.userHourlyRates[u.id];
+  if(data.staffWorkStatus){
+    const nm=u.name||u.id;
+    if(data.staffWorkStatus[nm])delete data.staffWorkStatus[nm];
+  }
+  saveData(data);
+  renderDropdownEdit();
+  showModal({title:"削除完了",sub:`${u.name||u.id} を削除しました`,big:"🗑️"});
+});
+    btns.appendChild(dBtn);
+    sList.appendChild(div);
   });
 }
+/* === STAFF EDIT OVERLAY === */
+let _staffEditId = null;
+function openStaffEdit(userId) {
+  _staffEditId = userId;
+  const u = data.users[userId]; if (!u) return;
+  $("seId").value = u.id;
+  $("sePw").value = "";
+  $("seName").value = u.name || "";
+  $("seType").value = u.userType || "学生";
+  $("seRate").value = String(getUserHourlyRate(u.id));
+  openLayer($("staffEditOverlay"));
+}
+$("staffEditClose").addEventListener("click", () => { closeLayer($("staffEditOverlay")); });
+$("staffEditOverlay").addEventListener("click", e => { if (e.target === $("staffEditOverlay")) closeLayer($("staffEditOverlay")); });
+$("seRate").addEventListener("input", function(){ this.value = this.value.replace(/[^0-9]/g, ""); });
+$("staffEditSave").addEventListener("click", async () => {
+  if (!_staffEditId) return;
+  const u = data.users[_staffEditId]; if (!u) return;
+  const newId = $("seId").value.trim();
+  const newPw = $("sePw").value.trim();
+  const newName = $("seName").value.trim();
+  const newType = $("seType").value;
+  const newRate = parseInt($("seRate").value);
+  if (!newId) { showModal({ title: "IDは必須です", big: "⚠️" }); return; }
+  if (newId !== _staffEditId && data.users[newId]) { showModal({ title: "IDが重複しています", big: "🧩" }); return; }
+  
+  // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
+  try {
+  const oldId = _staffEditId;
+
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain"},
+    body: JSON.stringify({
+      _action: "upsertStaffUser",
+      token: getToken(),
+      id: newId,
+      pw: newPw,
+      name: newName||newId,
+      userType: newType
+    }),
+    redirect: "follow"
+  });
+  const r = await resp.json();
+  if (!r.ok) {
+    showModal({title: "エラー", sub: r.error, big: "🚫"});
+    return;
+  }
+
+  // ID変更時は旧IDもGAS側から削除
+  if (newId !== oldId) {
+    const delResp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({
+        _action: "deleteStaffUser",
+        token: getToken(),
+        id: oldId
+      }),
+      redirect: "follow"
+    });
+    const delResult = await delResp.json();
+    if (!delResult.ok) {
+      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
+      return;
+    }
+  }
+} catch(e) {
+  showModal({title: "通信エラー", big: "📡"});
+  return;
+}
+
+// Update fields
+u.name = newName || newId;
+if(newPw)u.pw = newPw;
+u.userType = newType;
+
+// Update hourly rate
+if (!isNaN(newRate) && newRate >= 0) {
+  data.userHourlyRates = data.userHourlyRates || {};
+  data.userHourlyRates[_staffEditId] = newRate;
+}
+
+// Handle ID change
+if (newId !== _staffEditId) {
+  const oldId = _staffEditId;
+  u.id = newId;
+  data.users[newId] = u;
+  delete data.users[oldId];
+
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+    data.userHourlyRates[newId] = data.userHourlyRates[oldId];
+    delete data.userHourlyRates[oldId];
+  }
+
+  _staffEditId = newId;
+}
+
+saveData(data);
+closeLayer($("staffEditOverlay"));
+renderDropdownEdit();
+showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
+});
+
 function openDdEdit(idx){
   ddEditIdx=idx;
   const name=data.taskTypes[idx];
@@ -1459,9 +1517,10 @@ function renderAdminNotifications(){
       })}
       const stampEl=document.getElementById(id+"StampReq");
       if(stampEl){stampEl.addEventListener("click",()=>{
+        // スタンプ申請がある最初のユーザーの編集画面へ遷移
         const reqUser=Object.values(data.users).find(u=>u&&u.pendingStampRequest&&u.pendingStampRequest.status==="pending");
         if(reqUser){
-          data.session.adminEditingUserId=reqUser.id;saveData(data);
+          data.session.adminEditingUserId=reqUser.id;saveLocalOnly(data);
           editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit";
         } else { location.hash="#admin"; }
       })}
@@ -1470,18 +1529,47 @@ function renderAdminNotifications(){
     }
   });
 }
+function renderAdminCreds() {
+  $("adminCredId").value = "";
+  $("adminCredOldPw").value = "";
+  $("adminCredPw").value = "";
+}
+$("adminCredSave").addEventListener("click", async function(){
+  const nid = $("adminCredId").value.trim();
+  const oldPw = ($("adminCredOldPw")?$("adminCredOldPw").value:"").trim();
+  const npw = $("adminCredPw").value.trim();
 
-(function(){if(!location.hash||location.hash==="#admin-login")location.hash="#user-login";route();document.addEventListener("DOMContentLoaded", initSync)})();
+  if(!nid || !oldPw || !npw){
+    showModal({title:"ID・旧PW・新PWは必須です",big:"⚠️"});
+    return;
+  }
+  if(!API_URL){
+    showModal({title:"API未接続です（⚙で設定）",big:"⚠️"});
+    return;
+  }
+  try{
+    const resp = await fetch(API_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"text/plain" },
+      body: JSON.stringify({_action:"setAdminCreds", token:getToken(), oldPw:oldPw, newId:nid, newPw:npw}),
+      redirect:"follow"
+    });
+    const r = await resp.json();
+    if(!r.ok){
+      showModal({title:"更新失敗",sub:(r.error||"unauthorized"),big:"⚠️"});
+      return;
+    }
+    showModal({title:"更新しました",sub:"次回ログインから新ID/PWです",big:"✅"});
+    $("adminCredOldPw").value="";
+    $("adminCredPw").value="";
+  }catch(e){
+    showModal({title:"通信エラー",sub:String(e),big:"📡"});
+  }
+});
 
-</script>
-
-</div>
-
-
-<div class="sync-badge" id="syncBar">
-  <span class="sync-dot loading" id="syncDot"></span>
-  <span id="syncMsg">接続中...</span>
-</div>
-
-</body>
-</html>
+(function(){
+  if(!location.hash || location.hash==="#user-login") location.hash="#admin-login";
+  route();
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initSync, {once:true});
+  else initSync();
+})();

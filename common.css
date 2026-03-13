@@ -267,16 +267,16 @@ td.editing input, td.editing select, td.editing textarea { font-size: 11px; padd
 .dd-info { flex: 1; min-width: 0; }
 .dd-price { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .dd-btns { display: flex; gap: 4px; flex-shrink: 0; }
-.dd-edit-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.dd-edit-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; align-items: center; justify-content: center; }
 .dd-edit-overlay[style*="display: none"] { display: none !important; }
 .dd-edit-modal { background: #fff; border-radius: var(--radius); padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 
 /* === OVERLAY / MODAL === */
-.overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 999; display: flex; align-items: center; justify-content: center; }
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 999; align-items: center; justify-content: center; }
 .overlay[style*="display: none"] { display: none !important; }
 .overlay[style*="display: block"] { display: flex !important; }
 .modal { background: #fff; border-radius: var(--radius); max-width: 600px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); overflow: hidden; }
-.modal .mh { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,.06); }
+.modal .mh { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,.06); gap: 12px; }
 .modal .mh h3 { font-family: var(--font-display); font-size: 16px; }
 .modal .mh .sub { font-size: 11px; color: var(--muted); }
 .modal .mb { padding: 20px; text-align: center; }
@@ -285,7 +285,7 @@ td.editing input, td.editing select, td.editing textarea { font-size: 11px; padd
 .modal .mb .small { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
 /* === LOTTERY === */
-.lottery-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 1001; display: flex; align-items: center; justify-content: center; }
+.lottery-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 1001; align-items: center; justify-content: center; }
 .lottery-overlay[style*="display: none"] { display: none !important; }
 .lottery-overlay[style*="display: block"] { display: flex !important; }
 .lottery-box { background: #fff; border-radius: 20px; padding: 30px; text-align: center; max-width: 400px; width: 90%; }
@@ -368,18 +368,18 @@ td.editing input, td.editing select, td.editing textarea { font-size: 11px; padd
 
 /* === API SETUP OVERLAY === */
 #apiSetupOverlay {
-  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,.4); z-index: 1002;
-  display: flex; align-items: center; justify-content: center;
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.55); z-index: 1002;
+  align-items: center; justify-content: center;
 }
 #apiSetupOverlay[style*="display: none"] { display: none !important; }
 #apiSetupOverlay[style*="display: block"] { display: flex !important; }
 
 /* === STAFF EDIT OVERLAY === */
 #staffEditOverlay {
-  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,.4); z-index: 1002;
-  display: flex; align-items: center; justify-content: center;
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.6); z-index: 1002;
+  align-items: center; justify-content: center;
 }
 #staffEditOverlay[style*="display: none"] { display: none !important; }
 #staffEditOverlay[style*="display: block"] { display: flex !important; }
