@@ -166,7 +166,7 @@
       <div class="bd">
         <div class="form-section"><div class="form-title">ユーザー情報</div>
           <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>ID</label><input id="editUid"></div><div class="form-group"><label>名前</label><input id="editUname"></div></div>
-          <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>PW</label><input id="editUpw" type="text"></div><div class="form-group"><label>種別</label><select id="editUserType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
+          <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>PW</label><input id="editUpw" type="text" placeholder="変更時のみ入力"></div><div class="form-group"><label>種別</label><select id="editUserType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
           <button id="btnSaveUserInfo" class="btn success" style="width:100%;">情報を保存</button></div>
         <div class="statgrid" style="margin-top:12px;">
           <div class="stat"><div class="k">累計</div><div class="v"><span id="eTotal">0</span><span class="u">pt</span></div></div>
@@ -259,7 +259,7 @@
   <div class="dd-edit-modal" style="max-width:450px;">
     <div class="mh"><div><h3>👤 スタッフ情報編集</h3></div><button class="btn small" id="staffEditClose">閉じる</button></div>
     <div class="mb" style="display:grid;gap:10px;">
-      <div class="row"><div><label>ログインID</label><input id="seId" placeholder="ログインID"></div><div><label>パスワード</label><input id="sePw" type="text" placeholder="パスワード"></div></div>
+      <div class="row"><div><label>ログインID</label><input id="seId" placeholder="ログインID"></div><div><label>パスワード</label><input id="sePw" type="text" placeholder="変更時のみ入力（新規は必須）"></div></div>
       <div class="row"><div><label>スタッフ名</label><input id="seName" placeholder="スタッフ名"></div><div><label>種別</label><select id="seType"><option value="学生">学生</option><option value="社会人">社会人</option></select></div></div>
       <div><label>時給（円）</label><input id="seRate" type="text" inputmode="numeric" placeholder="例：1300"></div>
       <button class="btn primary" id="staffEditSave" style="width:100%;">保存 ✅</button>
@@ -750,7 +750,7 @@ const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.cre
 
 /* === ADMIN STAMP HOME === */
 $("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
-$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
+$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
 function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin().then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
@@ -777,11 +777,11 @@ $("ePrev").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCurs
 $("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
 $("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
 $("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveData(data);location.hash="#admin"});
-$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
+$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
 $("btnSaveUserInfo").addEventListener("click", async ()=>{
   const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;
   const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
-  if(!nid||!np){showModal({title:"入力不足",big:"⚠️"});return}
+  if(!nid){showModal({title:"入力不足",sub:"IDは必須です",big:"⚠️"});return}
   if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
 
   try {
@@ -828,7 +828,7 @@ $("btnSaveUserInfo").addEventListener("click", async ()=>{
 }
 
 u.name=nn||nid;
-u.pw=np;
+if(np)u.pw=np;
 u.userType=nt;
 if(nid!==oldId){
   u.id=nid;
@@ -854,8 +854,7 @@ $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
 // Show pending stamp request info
 const hasPending=u.pendingStampRequest&&u.pendingStampRequest.status==="pending";
 if(hasPending){
-  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:true,
-    onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()},
+  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:false,onDayClick:null,
     pendingChanges:u.pendingStampRequest.stamps,originalStamps:u.stamps});
 } else {
   renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.stamps,clickable:true,onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()}});
@@ -1032,7 +1031,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
                 downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
               }
             }else if(t.fileNames && t.fileNames.length){
-              t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+              downloadTaskFiles(t);
             }
           });
           wrap.appendChild(dlBtn);
@@ -1052,7 +1051,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
                 downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
               }
             }else if(t.fileNames && t.fileNames.length){
-              t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+              downloadTaskFiles(t);
             }
           });
           wrap.appendChild(dlBtn);
@@ -1075,7 +1074,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
           dlBtn.addEventListener("click",()=>{
-            t.fileNames.forEach(fn=>showModal({title:"ダウンロード",sub:fn,big:"📥"}));
+            downloadTaskFiles(t);
           });wrap.appendChild(dlBtn);
         }
         // Submit button
@@ -1497,7 +1496,7 @@ $("staffEditSave").addEventListener("click", async () => {
   const newName = $("seName").value.trim();
   const newType = $("seType").value;
   const newRate = parseInt($("seRate").value);
-  if (!newId || !newPw) { showModal({ title: "ID・PWは必須です", big: "⚠️" }); return; }
+  if (!newId) { showModal({ title: "IDは必須です", big: "⚠️" }); return; }
   if (newId !== _staffEditId && data.users[newId]) { showModal({ title: "IDが重複しています", big: "🧩" }); return; }
   
   // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
@@ -1548,7 +1547,7 @@ $("staffEditSave").addEventListener("click", async () => {
 
 // Update fields
 u.name = newName || newId;
-u.pw = newPw;
+if(newPw)u.pw = newPw;
 u.userType = newType;
 
 // Update hourly rate

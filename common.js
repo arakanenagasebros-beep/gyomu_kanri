@@ -172,8 +172,50 @@ async function processQueue() {
 
 async function syncPush() { return true; }
 
+function sanitizeRemoteData(remoteData) {
+  const clean = { ...remoteData };
+  delete clean._version;
+  delete clean._updatedAt;
+  const localSession = (data && data.session)
+    ? JSON.parse(JSON.stringify(data.session))
+    : { userId: "", adminAuthed: false, adminEditingUserId: "", adminReportEditingUserId: "" };
+  clean.session = localSession;
+  return clean;
+}
+
+function waitForQueueIdle(timeoutMs = 5000) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    (function check() {
+      if (!isSending && actionQueue.length === 0) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(check, 50);
+    })();
+  });
+}
+
+function downloadTaskFiles(task) {
+  if (!task || !task.fileNames || !task.fileNames.length || task.fileNames[0] === "（ファイルなし）") return;
+  if (task.fileIds && task.fileIds.length) {
+    for (let i = 0; i < task.fileIds.length; i++) {
+      if (task.fileIds[i]) {
+        downloadDriveFile(task.fileIds[i], (task.fileNames && task.fileNames[i]) || "download");
+      }
+    }
+    return;
+  }
+  task.fileNames.forEach(fn => showModal({ title: "ダウンロード", sub: fn, big: "📥" }));
+}
+
 async function syncPull() {
   if (!API_URL || _isSyncing) return false;
+  await waitForQueueIdle();
   _isSyncing = true;
   try {
     const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
@@ -291,6 +333,7 @@ function stopSyncPolling() {
 // 強制同期: 重要な画面遷移前に最新データを取得
 async function forceSyncPull() {
   if (!API_URL) return false;
+  await waitForQueueIdle();
   // _isSyncingチェックをスキップして強制的にpull
   const wasSyncing = _isSyncing;
   _isSyncing = true;
@@ -299,9 +342,7 @@ async function forceSyncPull() {
     const result = await resp.json();
     if (result.ok && result.data) {
       _syncVersion = result.data._version || 0;
-      const clean = { ...result.data };
-      delete clean._version;
-      delete clean._updatedAt;
+      const clean = sanitizeRemoteData(result.data);
       localStorage.setItem(LS_KEY, JSON.stringify(clean));
       data = JSON.parse(JSON.stringify(clean));
       lastSyncedDataStr = JSON.stringify(clean);
