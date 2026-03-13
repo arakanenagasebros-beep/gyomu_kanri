@@ -1,35 +1,31 @@
-/* === VIEWS (admin-specific) === */
-const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
+/* === VIEWS (staff-specific) === */
+const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHome"),reportInput:$("reportInput"),reportConfirm:$("reportConfirm"),staffTaskList:$("staffTaskList"),adminAuth:_noop,adminReportMgmt:_noop,adminReportDetail:_noop,adminTaskList:_noop,adminDropdownEdit:_noop,adminHome:_noop,adminEdit:_noop,adminMonthCheck:_noop};
 const on=(id,ev,fn,opt)=>{const el=$(id);if(el)el.addEventListener(ev,fn,opt);return el};
 
 
 /* === MODAL/ESCAPE SETUP === */
 on("mClose","click",hideModal);on("overlay","click",e=>{if(e.target===$("overlay"))hideModal()});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();closeLayer(document.getElementById("fileOverlay"));closeLayer(document.getElementById("taskAddOverlay"));closeLayer(document.getElementById("ddEditOverlay"));closeLayer(document.getElementById("apiSetupOverlay"));closeLayer(document.getElementById("staffEditOverlay"));}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
 on("lotteryClose","click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
-function openLayer(el){ if(!el) return; el.style.display="block"; }
-function closeLayer(el){ if(!el) return; el.style.display="none"; }
-function closeAdminTransientOverlays(){ closeLayer($("staffEditOverlay")); closeLayer($("ddEditOverlay")); closeLayer($("apiSetupOverlay")); }
-function route(){checkOverdue();closeAdminTransientOverlays();const h=location.hash||"#admin-login";
-if(h==="#user-login"||h==="#user-stamp"||h==="#user"||h==="#report-input"||h==="#report-confirm"||h==="#staff-task-list"){window.location.href="staff.html"+h;return}
-if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";$("adminLoginPw").value="";return}
-if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminReportMgmt");renderAdminReportMgmt();return}
-if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.adminReportEditingUserId){location.hash="#admin-report-mgmt";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
-if(h==="#admin-task-list"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminTaskList");renderAdminTaskList();return}
-if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminDropdownEdit");renderDropdownEdit();return}
-if(h==="#admin-month-check"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminMonthCheck");renderMonthCheck();return}
-if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminHome");renderAdminHome();syncPull().then(changed=>{if(changed && location.hash==="#admin" && data.session.adminAuthed) renderAdminHome()});return}
-if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();syncPull().then(changed=>{if(changed && location.hash==="#admin-edit" && data.session.adminAuthed && data.session.adminEditingUserId) renderAdminEdit()});return}
-location.hash="#admin-login"}
+function route(){checkOverdue();const h=location.hash||"#user-login";
+if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
+if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
+if(h==="#user-stamp"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
+if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();syncPull().then(changed=>{if(changed && location.hash==="#user" && data.session.userId) renderUserHome()});return}
+if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
+if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
+if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
+location.hash="#user-login"}
 window.addEventListener("hashchange",route);
 
 /* === NAV === */
+// Nav helpers (staff only - admin refs safely ignored via _noop)
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
-function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";closeAdminTransientOverlays();saveLocalOnly(data);location.hash="#admin-login"}
-on("adminLogout","click",doAdminLogout);on("armLogout","click",doAdminLogout);on("atlLogout","click",doAdminLogout);on("ddeLogout","click",doAdminLogout);
+function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
+on("stampLogout","click",doLogout);on("userLogout","click",doLogout);on("confirmLogout","click",doLogout);on("stlLogout","click",doLogout);
 
 // Login
 on("btnUserLogin","click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
@@ -54,21 +50,6 @@ try{
 }catch(e){$("userAuthErr").textContent="通信エラー";$("userAuthErr").style.display="block";}
 });
 on("userLoginPw","keydown",e=>{if(e.key==="Enter")$("btnUserLogin").click()});
-on("btnAdminLogin","click", async ()=>{const id=$("adminLoginId").value.trim(),pw=$("adminLoginPw").value;$("adminAuthErr").style.display="none";
-if(!API_URL){$("adminAuthErr").textContent="API未接続です（⚙で設定）";$("adminAuthErr").style.display="block";return}
-try{
-  const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginAdmin",id,pw}),redirect:"follow"});
-  const result=await resp.json();
-  if(!result.ok){$("adminAuthErr").textContent="ログインに失敗しました。";$("adminAuthErr").style.display="block";return}
-  setToken(result.token);
-  data.session.adminAuthed=true;
-  data.session.adminEditingUserId="";
-  saveData(data);
-  await syncPull();
-  location.hash="#admin";
-}catch(e){$("adminAuthErr").textContent="通信エラー";$("adminAuthErr").style.display="block";}
-});
-on("adminLoginPw","keydown",e=>{if(e.key==="Enter")$("btnAdminLogin").click()});
 
 // Nav buttons
 let rpTransportLocked=false;
@@ -82,7 +63,7 @@ on("btnGoReportList","click",()=>location.hash="#report-confirm");
 on("btnGoTaskListFromCal","click",()=>location.hash="#staff-task-list");
 on("reportBackToCal","click",()=>{
   if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveLocalOnly(data);editingReportIdx=-1;location.hash="#admin-report-detail";return}
-  const u=data.users[data.session.userId];window.location.href="staff.html"+(u&&u.userType==="社会人"?"#report-confirm":"#user")});
+  const u=data.users[data.session.userId];location.hash=u&&u.userType==="社会人"?"#report-confirm":"#user"});
 on("confirmBackToCal","click",()=>{const u=data.users[data.session.userId];if(u&&u.userType==="社会人")return;location.hash="#user"});
 on("confirmGoTask","click",()=>location.hash="#staff-task-list");
 on("btnNewReport","click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
@@ -95,7 +76,8 @@ const tabNav=(rm,sm,tl,dd,mc)=>{$(rm).addEventListener("click",()=>location.hash
 tabNav("tabRM","tabSM","tabTL","tabDD","tabMC");tabNav("tabRM2","tabSM2","tabTL2","tabDD2","tabMC2");tabNav("tabRM3","tabSM3","tabTL3","tabDD3","tabMC3");tabNav("tabRM4","tabSM4","tabTL4","tabDD4","tabMC4");
 
 /* === STAMP SCREEN === */
-function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
+u.stamps = u.stamps || {};
 const now=new Date(),total=countTotal(u),stamped=!!u.stamps[ymd(now)];
 $("stampUserName").textContent=u.name||u.id;$("stampDate").textContent=`${now.getMonth()+1}月${now.getDate()}日（${dowJa(now)}）`;
 renderRankBadge($("stampRankBadge"),total);renderProgress($("stampRankInfo"),total);
@@ -139,7 +121,8 @@ on("uThis","click",()=>{userMonthCursor=startOfMonth(new Date());renderUserHome(
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
-function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
+u.stamps = u.stamps || {};
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
@@ -360,19 +343,17 @@ tr:nth-child(even){background:#F2F2F2;}
 
 // User add (moved here)
 on("btnAddUser","click", async ()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
-if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}
+if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}if(data.users[id]){showModal({title:"ID重複",big:"🧩"});return}
 if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
   const r=await resp.json();
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
-// ローカルデータにはPWを保存しない（全ての空箱を初期化して作る）
   data.users=data.users||{};
   const existing = data.users[id] || {};
   data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
-  saveData(data);
-  $("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
-  showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
+  saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
+  renderAdminReportMgmt();showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
 }catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}
 });
 
@@ -507,74 +488,35 @@ on("eNext","click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdmi
 on("eThis","click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
 on("backToAdminHome","click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
 on("resetThisUser","click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
-on("btnSaveUserInfo","click", async ()=>{
-  const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;
-  const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
-  if(!nid){showModal({title:"入力不足",sub:"IDは必須です",big:"⚠️"});return}
-  if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
-
+on("btnSaveUserInfo","click", async ()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
+if(!nid){showModal({title:"入力不足",sub:"IDは必須です",big:"⚠️"});return}if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
+if(API_URL){
   try {
-  const resp = await fetch(API_URL, {
-    method: "POST",
-    headers: {"Content-Type": "text/plain"},
-    body: JSON.stringify({
-      _action: "upsertStaffUser",
-      token: getToken(),
-      id: nid,
-      pw: np,
-      name: nn||nid,
-      userType: nt
-    }),
-    redirect: "follow"
-  });
-  const r = await resp.json();
-  if (!r.ok) {
-    showModal({title: "エラー", sub: r.error, big: "🚫"});
-    return;
-  }
-
-  // ID変更時は旧IDをGAS側からも削除
-  if (nid !== oldId) {
-    const delResp = await fetch(API_URL, {
+    const resp = await fetch(API_URL, {
       method: "POST",
       headers: {"Content-Type": "text/plain"},
-      body: JSON.stringify({
-        _action: "deleteStaffUser",
-        token: getToken(),
-        id: oldId
-      }),
+      body: JSON.stringify({_action: "upsertStaffUser", token: getToken(), id: nid, pw: np, name: nn||nid, userType: nt}),
       redirect: "follow"
     });
-    const delResult = await delResp.json();
-    if (!delResult.ok) {
-      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
-      return;
+    const r = await resp.json();
+    if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
+    if (nid !== oldId) {
+      const delResp = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain"},
+        body: JSON.stringify({_action: "deleteStaffUser", token: getToken(), id: oldId}),
+        redirect: "follow"
+      });
+      const delResult = await delResp.json();
+      if (!delResult.ok) { showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"}); return; }
     }
-  }
-} catch(e) {
-  showModal({title: "通信エラー", big: "📡"});
-  return;
+  } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
 }
-
-u.name=nn||nid;
-if(np)u.pw=np;
-u.userType=nt;
-if(nid!==oldId){
-  u.id=nid;
-  data.users[nid]=u;
-  delete data.users[oldId];
-
-  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
-    data.userHourlyRates[nid] = data.userHourlyRates[oldId];
-    delete data.userHourlyRates[oldId];
-  }
-
-  data.session.adminEditingUserId=nid;
-}
-saveData(data);
-renderAdminEdit();
-showModal({title:"更新完了",big:"✅"});
-});
+u.name=nn||nid;if(np)u.pw=np;u.userType=nt;
+if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) { data.userHourlyRates[nid] = data.userHourlyRates[oldId]; delete data.userHourlyRates[oldId]; }
+  data.session.adminEditingUserId=nid}
+saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value="";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
@@ -781,15 +723,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{
-            if(t.fileIds && t.fileIds.length){
-              for(let i=0;i<t.fileIds.length;i++){
-                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
-              }
-            }else if(t.fileNames && t.fileNames.length){
-              downloadTaskFiles(t);
-            }
-          });
+          dlBtn.addEventListener("click",()=>downloadTaskFiles(t));
           wrap.appendChild(dlBtn);
         }
         const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
@@ -801,15 +735,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         const span=document.createElement("span");span.style.fontSize="10px";span.style.color="var(--mint)";span.textContent="✅ 完了";wrap.appendChild(span);
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{
-            if(t.fileIds && t.fileIds.length){
-              for(let i=0;i<t.fileIds.length;i++){
-                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
-              }
-            }else if(t.fileNames && t.fileNames.length){
-              downloadTaskFiles(t);
-            }
-          });
+          dlBtn.addEventListener("click",()=>downloadTaskFiles(t));
           wrap.appendChild(dlBtn);
         }
         const revertBtn=document.createElement("button");revertBtn.className="btn danger small";revertBtn.textContent="↩ 依頼中に戻す";
@@ -852,7 +778,10 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       } else if(t.status==="依頼前"){
         tdSub.textContent="―";
       } else {
-        if(t.fileNames&&t.fileNames.length){tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${escapeHtml(t.fileNames.join(", "))}</span>`}
+        if(t.fileNames&&t.fileNames.length){
+        const links=(t.fileIds&&t.fileIds.length)?t.fileNames.map((n,i)=>{const fid=t.fileIds[i];return fid?`<a href="#" class="fileLink" data-fileid="${fid}" data-filename="${escapeHtml(n)}">${escapeHtml(n)}</a>`:escapeHtml(n);}).join(", "):escapeHtml(t.fileNames.join(", "));
+        tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${links}</span>`;
+        tdSub.querySelectorAll(".fileLink").forEach(a=>{a.addEventListener("click",e=>{e.preventDefault();downloadDriveFile(a.dataset.fileid,a.dataset.filename||"download")})})}
       }
     }
     tr.appendChild(tdSub);
@@ -872,7 +801,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           else if(f==="requestDate"||f==="deadline"||f==="completionDate"){inp=document.createElement("input");inp.type="date";inp.value=t[f]||"";}
           else if(f==="taskType"){inp=document.createElement("select");getTaskTypes().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
           else if(f==="employee"){inp=document.createElement("select");getEmployees().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
-          else if(f==="staff"){inp=document.createElement("select");const _uo=document.createElement("option");_uo.value="未指定";_uo.textContent="未指定";inp.appendChild(_uo);getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"未指定";}
+          else if(f==="staff"){inp=document.createElement("select");getStaffNames().forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
           else if(f==="textCodes"){inp=document.createElement("input");inp.type="text";inp.value=(t.textCodes||[]).join(", ");}
           else{inp=document.createElement("input");inp.type=f==="manHours"||f==="seqNum"?"number":"text";inp.value=t[f]||"";}
           inp.style.cssText="font-size:11px;padding:2px 4px;border-radius:6px;width:100%;min-width:60px;";
@@ -1006,7 +935,6 @@ function applyTaskTypeLogic(){
   const wt=$("taWorkType").value;
   const staffName=$("taStaff").value;
   const isShakaijin=isStaffShakaijin(staffName);
-  // 出勤 or 社会人 → force 時給 and disable
   if(wt==="出勤"||isShakaijin){
     $("taTaskType").value="時給";
     if(!getTaskTypes().includes("時給"))$("taTaskType").value="その他（時給）";
@@ -1156,7 +1084,6 @@ let ddEditIdx=-1;
 let ddEditType=""; // "taskType" or ""
 function renderDropdownEdit(){
   renderAdminNotifications();
-  renderAdminCreds();
   // Task Types with prices
   const ttList=$("ddTaskTypeList");ttList.innerHTML="";
   getTaskTypes().forEach((t,i)=>{
@@ -1177,162 +1104,23 @@ function renderDropdownEdit(){
     const btns=div.querySelector(".dd-btns");
     const btn=document.createElement("button");btn.className="btn danger small";btn.textContent="削除";
     btn.addEventListener("click",()=>{if(!confirm(`「${data.employees[i]}」を削除しますか？`))return;data.employees.splice(i,1);saveData(data);renderDropdownEdit()});btns.appendChild(btn);eList.appendChild(div)});
-  // Staff list with full edit & delete
+  // Staff hourly rates
   const sList=$("ddStaffList");sList.innerHTML="";
   Object.values(data.users).sort((a,b)=>{const aT=(a.userType||"学生")==="社会人"?0:1;const bT=(b.userType||"学生")==="社会人"?0:1;return aT!==bT?aT-bT:(a.createdAt||0)-(b.createdAt||0)}).forEach(u=>{
     const hr=getUserHourlyRate(u.id);const cls=u.userType==="社会人"?"tag shakaijin":"tag student";
     const div=document.createElement("div");div.className="dd-item";
-    div.innerHTML=`<div class="dd-info"><span>${escapeHtml(u.name||u.id)}</span> <span class="${cls}" style="font-size:10px;">${escapeHtml(u.userType||"学生")}</span><div class="dd-price">${hr.toLocaleString()}円/h</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">ID: ${escapeHtml(u.id)}</div></div><div class="dd-btns"></div>`;
+    div.innerHTML=`<div class="dd-info"><span>${escapeHtml(u.name||u.id)}</span> <span class="${cls}" style="font-size:10px;">${escapeHtml(u.userType||"学生")}</span><div class="dd-price">${hr.toLocaleString()}円/h</div></div><div class="dd-btns"></div>`;
     const btns=div.querySelector(".dd-btns");
-    // Edit button - opens overlay with full staff fields
     const eBtn=document.createElement("button");eBtn.className="btn small ghost";eBtn.textContent="編集";
-    eBtn.addEventListener("click",()=>openStaffEdit(u.id));
-    btns.appendChild(eBtn);
-    // Delete button
-    const dBtn=document.createElement("button");dBtn.className="btn small danger";dBtn.textContent="削除";
-dBtn.addEventListener("click", async ()=>{
-  if(!confirm(`「${u.name||u.id}」を削除しますか？\nこのスタッフの全データ（日報・スタンプ等）も削除されます。`))return;
-  if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
-
-  try{
-    const resp = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type": "text/plain"},
-      body: JSON.stringify({
-        _action: "deleteStaffUser",
-        token: getToken(),
-        id: u.id
-      }),
-      redirect: "follow"
-    });
-    const r = await resp.json();
-    if(!r.ok){
-      showModal({title:"削除失敗",sub:r.error||"エラー",big:"🚫"});
-      return;
-    }
-  }catch(e){
-    showModal({title:"通信エラー",sub:"スタッフ削除に失敗しました。",big:"📡"});
-    return;
-  }
-
-  delete data.users[u.id];
-  if(data.userHourlyRates&&data.userHourlyRates[u.id]!=null)delete data.userHourlyRates[u.id];
-  if(data.staffWorkStatus){
-    const nm=u.name||u.id;
-    if(data.staffWorkStatus[nm])delete data.staffWorkStatus[nm];
-  }
-  saveData(data);
-  renderDropdownEdit();
-  showModal({title:"削除完了",sub:`${u.name||u.id} を削除しました`,big:"🗑️"});
-});
-    btns.appendChild(dBtn);
-    sList.appendChild(div);
+    eBtn.addEventListener("click",()=>{
+      const newRate=prompt(`${u.name||u.id} の時給（円）`,String(hr));
+      if(newRate===null)return;const val=parseInt(newRate);
+      if(isNaN(val)||val<0){showModal({title:"無効な値です",big:"⚠️"});return}
+      data.userHourlyRates[u.id]=val;saveData(data);renderDropdownEdit();
+      showModal({title:"時給更新",sub:`${u.name||u.id}: ${val.toLocaleString()}円/h`,big:"✅"});
+    });btns.appendChild(eBtn);sList.appendChild(div);
   });
 }
-/* === STAFF EDIT OVERLAY === */
-let _staffEditId = null;
-function openStaffEdit(userId) {
-  _staffEditId = userId;
-  const u = data.users[userId]; if (!u) return;
-  $("seId").value = u.id;
-  $("sePw").value = "";
-  $("seName").value = u.name || "";
-  $("seType").value = u.userType || "学生";
-  $("seRate").value = String(getUserHourlyRate(u.id));
-  openLayer($("staffEditOverlay"));
-}
-on("staffEditClose","click", () => { closeLayer($("staffEditOverlay")); });
-on("staffEditOverlay","click", e => { if (e.target === $("staffEditOverlay")) closeLayer($("staffEditOverlay")); });
-on("seRate","input", function(){ this.value = this.value.replace(/[^0-9]/g, ""); });
-on("staffEditSave","click", async () => {
-  if (!_staffEditId) return;
-  const u = data.users[_staffEditId]; if (!u) return;
-  const newId = $("seId").value.trim();
-  const newPw = $("sePw").value.trim();
-  const newName = $("seName").value.trim();
-  const newType = $("seType").value;
-  const newRate = parseInt($("seRate").value);
-  if (!newId) { showModal({ title: "IDは必須です", big: "⚠️" }); return; }
-  if (newId !== _staffEditId && data.users[newId]) { showModal({ title: "IDが重複しています", big: "🧩" }); return; }
-  
-  // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
-  try {
-  const oldId = _staffEditId;
-
-  const resp = await fetch(API_URL, {
-    method: "POST",
-    headers: {"Content-Type": "text/plain"},
-    body: JSON.stringify({
-      _action: "upsertStaffUser",
-      token: getToken(),
-      id: newId,
-      pw: newPw,
-      name: newName||newId,
-      userType: newType
-    }),
-    redirect: "follow"
-  });
-  const r = await resp.json();
-  if (!r.ok) {
-    showModal({title: "エラー", sub: r.error, big: "🚫"});
-    return;
-  }
-
-  // ID変更時は旧IDもGAS側から削除
-  if (newId !== oldId) {
-    const delResp = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type": "text/plain"},
-      body: JSON.stringify({
-        _action: "deleteStaffUser",
-        token: getToken(),
-        id: oldId
-      }),
-      redirect: "follow"
-    });
-    const delResult = await delResp.json();
-    if (!delResult.ok) {
-      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
-      return;
-    }
-  }
-} catch(e) {
-  showModal({title: "通信エラー", big: "📡"});
-  return;
-}
-
-// Update fields
-u.name = newName || newId;
-if(newPw)u.pw = newPw;
-u.userType = newType;
-
-// Update hourly rate
-if (!isNaN(newRate) && newRate >= 0) {
-  data.userHourlyRates = data.userHourlyRates || {};
-  data.userHourlyRates[_staffEditId] = newRate;
-}
-
-// Handle ID change
-if (newId !== _staffEditId) {
-  const oldId = _staffEditId;
-  u.id = newId;
-  data.users[newId] = u;
-  delete data.users[oldId];
-
-  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
-    data.userHourlyRates[newId] = data.userHourlyRates[oldId];
-    delete data.userHourlyRates[oldId];
-  }
-
-  _staffEditId = newId;
-}
-
-saveData(data);
-closeLayer($("staffEditOverlay"));
-renderDropdownEdit();
-showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
-});
-
 function openDdEdit(idx){
   ddEditIdx=idx;
   const name=data.taskTypes[idx];
@@ -1519,7 +1307,6 @@ function renderAdminNotifications(){
       })}
       const stampEl=document.getElementById(id+"StampReq");
       if(stampEl){stampEl.addEventListener("click",()=>{
-        // スタンプ申請がある最初のユーザーの編集画面へ遷移
         const reqUser=Object.values(data.users).find(u=>u&&u.pendingStampRequest&&u.pendingStampRequest.status==="pending");
         if(reqUser){
           data.session.adminEditingUserId=reqUser.id;saveLocalOnly(data);
@@ -1531,46 +1318,9 @@ function renderAdminNotifications(){
     }
   });
 }
-function renderAdminCreds() {
-  $("adminCredId").value = "";
-  $("adminCredOldPw").value = "";
-  $("adminCredPw").value = "";
-}
-on("adminCredSave","click", async function(){
-  const nid = $("adminCredId").value.trim();
-  const oldPw = ($("adminCredOldPw")?$("adminCredOldPw").value:"").trim();
-  const npw = $("adminCredPw").value.trim();
-
-  if(!nid || !oldPw || !npw){
-    showModal({title:"ID・旧PW・新PWは必須です",big:"⚠️"});
-    return;
-  }
-  if(!API_URL){
-    showModal({title:"API未接続です（⚙で設定）",big:"⚠️"});
-    return;
-  }
-  try{
-    const resp = await fetch(API_URL,{
-      method:"POST",
-      headers:{ "Content-Type":"text/plain" },
-      body: JSON.stringify({_action:"setAdminCreds", token:getToken(), oldPw:oldPw, newId:nid, newPw:npw}),
-      redirect:"follow"
-    });
-    const r = await resp.json();
-    if(!r.ok){
-      showModal({title:"更新失敗",sub:(r.error||"unauthorized"),big:"⚠️"});
-      return;
-    }
-    showModal({title:"更新しました",sub:"次回ログインから新ID/PWです",big:"✅"});
-    $("adminCredOldPw").value="";
-    $("adminCredPw").value="";
-  }catch(e){
-    showModal({title:"通信エラー",sub:String(e),big:"📡"});
-  }
-});
 
 (function(){
-  if(!location.hash || location.hash==="#user-login") location.hash="#admin-login";
+  if(!location.hash || location.hash==="#admin-login") location.hash="#user-login";
   route();
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initSync, {once:true});
   else initSync();
