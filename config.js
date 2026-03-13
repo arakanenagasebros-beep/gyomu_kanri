@@ -1,6 +1,4 @@
-// 環境差分はこのファイルだけ編集
-// ※GitHub Pages 等で公開する場合、ここに書いたURLは閲覧可能になります。
-//   Apps Script 側の公開範囲/トークン等で保護してください。
+/* config.js - 業務管理アプリ設定 */
 window.APP_CONFIG = {
-  DEFAULT_API_URL: "https://script.google.com/macros/s/AKfycbx1qqQqZe59Zwp2zI1K7T-gYMpeX8uyunHpyKhFH05wH2KuMGeYHgWihgBI5QhbSygc/exec"
+  DEFAULT_API_URL: ""  // GAS Web App URL をここに設定（例: "https://script.google.com/macros/s/xxxxx/exec"）
 };
