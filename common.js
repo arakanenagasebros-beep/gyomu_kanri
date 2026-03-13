@@ -94,7 +94,7 @@ function promptApiUrl() {
   inp.value = API_URL || "";
   st.textContent = API_URL ? "接続中" : "未設定";
   st.style.color = API_URL ? "#6bcb77" : "var(--muted)";
-  ov.style.display = "block";
+  ov.style.display = "flex";
 }
 
 function setupApiModal() {
@@ -590,7 +590,7 @@ function autoWorkloadStatus(staffName){
 function nextSeqNum(workType){const existing=data.tasks.filter(t=>t.workType===workType);return existing.length+1}
 
 /* === MODAL === */
-function showModal(o){$("mTitle").textContent=o.title||"";$("mSub").textContent=o.sub||"";$("mBody").textContent=o.body||"";$("mBig").textContent=o.big||"🎉";$("mSmall").textContent=o.small||"";$("overlay").style.display="block"}
+function showModal(o){$("mTitle").textContent=o.title||"";$("mSub").textContent=o.sub||"";$("mBody").textContent=o.body||"";$("mBig").textContent=o.big||"🎉";$("mSmall").textContent=o.small||"";$("overlay").style.display="flex"}
 function hideModal(){$("overlay").style.display="none";if(modalCb){const cb=modalCb;modalCb=null;cb()}}
 var modalCb=null;function showModalCb(o,cb){showModal(o);modalCb=cb}
 
@@ -598,7 +598,7 @@ function showConfetti(){const c=document.createElement("div");c.className="confe
 
 /* === LOTTERY === */
 var lotteryCb=null;
-function startLottery(cb){lotteryCb=cb;var lo=$("lotteryOverlay");lo.style.display="block";$("lotteryResult").textContent="";$("lotteryClose").classList.add("hidden");$("lotteryCards").innerHTML="";
+function startLottery(cb){lotteryCb=cb;var lo=$("lotteryOverlay");lo.style.display="flex";$("lotteryResult").textContent="";$("lotteryClose").classList.add("hidden");$("lotteryCards").innerHTML="";
 const roll=Math.random();let prize=roll<.01?5:roll<.11?2:1;const vals=[5,2,1,1,1];for(let i=vals.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]]}
 let chosen=false;lo.dataset.prize=prize;
 vals.forEach(dv=>{const card=document.createElement("div");card.className="lottery-card";const vd=document.createElement("div");vd.className="card-val";vd.innerHTML=`<span class="pt-num">${dv}</span><span>pt</span>`;card.appendChild(vd);

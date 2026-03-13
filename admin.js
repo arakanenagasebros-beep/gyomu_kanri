@@ -913,7 +913,7 @@ function renderFileList(){
   $("dzFileName").textContent=allFiles.length>0?`${allFiles.length}件のファイル`:"";
 }
 function openFileUpload(task,mode){fileUploadMode=mode||"staff";fileUploadTask=task;pendingFiles=[];renderFileList();
-$("fileOverlay").style.display="block";$("fileInput").value="";
+$("fileOverlay").style.display="flex";$("fileInput").value="";
 // Adjust button labels based on mode
 if(fileUploadMode==="admin-attach"){$("fileSubmitBtn").textContent="ファイル添付 ✅";$("fileSubmitDirectBtn").textContent="添付せず閉じる"}
 else if(fileUploadMode==="admin-irai"){$("fileSubmitBtn").textContent="依頼中に変更 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで依頼中に変更"}
@@ -1016,7 +1016,7 @@ $("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate"
 popSel($("taTaskType"),getTaskTypes());popSel($("taEmployee"),getEmployees());
 populateStaffSelect($("taStaff"),"未指定");
 applyTaskTypeLogic();
-renderTextCodeInputs([""]);$("taskAddOverlay").style.display="block"}
+renderTextCodeInputs([""]);$("taskAddOverlay").style.display="flex"}
 
 $("taStaff").addEventListener("change",()=>{applyTaskTypeLogic()});
 $("taWorkType").addEventListener("change",()=>{applyTaskTypeLogic()});
@@ -1035,7 +1035,7 @@ $("taWorkType").value=t.workType;$("taStatus").value=t.status;$("taRequestDate")
 popSel($("taTaskType"),getTaskTypes(),t.taskType);popSel($("taEmployee"),getEmployees(),t.employee);
 populateStaffSelect($("taStaff"),t.staff||"未指定");
 applyTaskTypeLogic();
-renderTextCodeInputs(t.textCodes&&t.textCodes.length?t.textCodes:[""]);$("taskAddOverlay").style.display="block"}
+renderTextCodeInputs(t.textCodes&&t.textCodes.length?t.textCodes:[""]);$("taskAddOverlay").style.display="flex"}
 $("taskAddClose").addEventListener("click",()=>{$("taskAddOverlay").style.display="none"});
 function renderTextCodeInputs(codes){
   const area=$("taTextCodesArea");area.innerHTML="";
@@ -1234,7 +1234,7 @@ function openStaffEdit(userId) {
   $("seName").value = u.name || "";
   $("seType").value = u.userType || "学生";
   $("seRate").value = String(getUserHourlyRate(u.id));
-  $("staffEditOverlay").style.display = "block";
+  $("staffEditOverlay").style.display = "flex";
 }
 $("staffEditClose").addEventListener("click", () => { $("staffEditOverlay").style.display = "none"; });
 $("staffEditOverlay").addEventListener("click", e => { if (e.target === $("staffEditOverlay")) $("staffEditOverlay").style.display = "none"; });
@@ -1334,7 +1334,7 @@ function openDdEdit(idx){
   const price=getTaskPrice(name);
   $("ddEditName").value=name;
   $("ddEditPrice").value=(name==="時給"||name==="その他（時給）"?"":price!=null?String(price):"");
-  $("ddEditOverlay").style.display="block";
+  $("ddEditOverlay").style.display="flex";
 }
 $("ddEditClose").addEventListener("click",()=>{$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
 $("ddEditOverlay").addEventListener("click",e=>{if(e.target===$("ddEditOverlay"))$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
