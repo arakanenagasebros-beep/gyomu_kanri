@@ -288,6 +288,45 @@ function stopSyncPolling() {
   if (_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
 }
 
+// 強制同期: 重要な画面遷移前に最新データを取得
+async function forceSyncPull() {
+  if (!API_URL) return false;
+  // _isSyncingチェックをスキップして強制的にpull
+  const wasSyncing = _isSyncing;
+  _isSyncing = true;
+  try {
+    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const result = await resp.json();
+    if (result.ok && result.data) {
+      _syncVersion = result.data._version || 0;
+      const clean = { ...result.data };
+      delete clean._version;
+      delete clean._updatedAt;
+      localStorage.setItem(LS_KEY, JSON.stringify(clean));
+      data = JSON.parse(JSON.stringify(clean));
+      lastSyncedDataStr = JSON.stringify(clean);
+      migrateData();
+      _lastSyncTime = Date.now();
+      updateSyncUI("ok", "同期済み ✓");
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  } finally {
+    _isSyncing = wasSyncing;
+  }
+}
+
+// スタンプ申請の件数を取得
+function countPendingStampRequests() {
+  let count = 0;
+  Object.values(data.users || {}).forEach(function(u) {
+    if (u && u.pendingStampRequest && u.pendingStampRequest.status === "pending") count++;
+  });
+  return count;
+}
+
 function migrateData() {
   Object.keys(data.users||{}).forEach(id=>{
     let u = data.users[id]; if(!u) return;

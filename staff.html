@@ -176,7 +176,7 @@ function route(){checkOverdue();const h=location.hash||"#user-login";
 if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
 if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
 if(h==="#user-stamp"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
-if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();return}
+if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");forceSyncPull().then(()=>{renderUserHome()});return}
 if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
 if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
 if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
@@ -312,6 +312,20 @@ const sra=$("stampRequestArea");sra.innerHTML="";
 if(u.userType==="学生"){
   if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
     sra.innerHTML=`<div style="margin-top:12px;"><span class="stamp-request-badge">📨 スタンプ修正申請中</span></div>`;
+    stampEditMode=false;
+  } else if(u.pendingStampRequest&&u.pendingStampRequest.status==="approved"){
+    const wrap=document.createElement("div");wrap.style.cssText="margin-top:12px;padding:12px;border-radius:12px;background:rgba(107,203,119,.12);border:1.5px solid rgba(107,203,119,.3);text-align:center;";
+    wrap.innerHTML=`<div style="font-weight:900;color:var(--mint);font-size:14px;">✅ スタンプ修正が承認されました！</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">カレンダーに反映済みです</div>`;
+    const dismissBtn=document.createElement("button");dismissBtn.className="btn ghost small";dismissBtn.style.cssText="margin-top:8px;font-size:11px;";dismissBtn.textContent="確認しました";
+    dismissBtn.addEventListener("click",()=>{u.pendingStampRequest=null;saveData(data);renderUserHome()});
+    wrap.appendChild(dismissBtn);sra.appendChild(wrap);
+    stampEditMode=false;
+  } else if(u.pendingStampRequest&&u.pendingStampRequest.status==="rejected"){
+    const wrap=document.createElement("div");wrap.style.cssText="margin-top:12px;padding:12px;border-radius:12px;background:rgba(255,71,87,.08);border:1.5px solid rgba(255,71,87,.2);text-align:center;";
+    wrap.innerHTML=`<div style="font-weight:900;color:var(--red);font-size:14px;">❌ スタンプ修正申請が却下されました</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">必要に応じて再度申請してください</div>`;
+    const dismissBtn=document.createElement("button");dismissBtn.className="btn ghost small";dismissBtn.style.cssText="margin-top:8px;font-size:11px;";dismissBtn.textContent="確認しました";
+    dismissBtn.addEventListener("click",()=>{u.pendingStampRequest=null;saveData(data);renderUserHome()});
+    wrap.appendChild(dismissBtn);sra.appendChild(wrap);
     stampEditMode=false;
   } else if(stampEditMode){
     const cancelBtn=document.createElement("button");cancelBtn.className="btn ghost";cancelBtn.style.cssText="width:100%;margin-top:12px;font-size:13px;padding:10px;";
@@ -507,10 +521,20 @@ tr:nth-child(even){background:#F2F2F2;}
 });
 
 // User add (moved here)
-$("btnAddUser").addEventListener("click",()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
+$("btnAddUser").addEventListener("click", async ()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
 if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}if(data.users[id]){showModal({title:"ID重複",big:"🧩"});return}
-data.users[id]={id,pw,name,userType:utype,stamps:{},incentives:{},bonusPoints:0,lastCongrats50:0,lastMonthFirstStamp:"",reports:[],createdAt:Date.now(),proofingIncentives:{},pendingStampRequest:null};
-saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";renderAdminReportMgmt();showModal({title:"追加完了",sub:`${id}（${name}）`,big:"✅"})});
+if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
+try{
+  const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
+  const r=await resp.json();
+  if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
+  data.users=data.users||{};
+  const existing = data.users[id] || {};
+  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
+  saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
+  renderAdminReportMgmt();showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
+}catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}
+});
 
 /* === ADMIN REPORT DETAIL === */
 let ardInit=false;
@@ -617,7 +641,7 @@ const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.cre
 $("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
 $("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
-function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent=getTodayPassword();const users=Object.values(data.users).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
+function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin().then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
 const tr=document.createElement("tr");[String(idx+1),null,u.name||u.id,null,countThisWeek(u,now)+"回",countThisMonth(u,now)+"回",total+"pt",null,rank.yen+"円",sInc.toLocaleString()+"円"].forEach((c,i)=>{
 const td=document.createElement("td");if(i===1)td.innerHTML=`<span class="tag">${escapeHtml(u.id)}</span>`;
@@ -627,7 +651,9 @@ else td.textContent=c;tr.appendChild(td)});
 // 申請 column
 const tdReq=document.createElement("td");
 if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
-  tdReq.innerHTML=`<span class="stamp-request-badge" style="font-size:9px;">📨 申請中</span>`;
+  const reqBadge=document.createElement("span");reqBadge.className="stamp-request-badge";reqBadge.style.cssText="font-size:9px;cursor:pointer;";reqBadge.textContent="📨 申請中";
+  reqBadge.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveData(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+  tdReq.appendChild(reqBadge);
 } else {tdReq.textContent="―"}
 tr.appendChild(tdReq);
 const tdE=document.createElement("td");const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="編集";
@@ -641,9 +667,35 @@ $("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCurs
 $("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
 $("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveData(data);location.hash="#admin"});
 $("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisited;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
-$("btnSaveUserInfo").addEventListener("click",()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
-if(!nid||!np){showModal({title:"入力不足",big:"⚠️"});return}if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}u.name=nn||nid;u.pw=np;u.userType=nt;
-if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];data.session.adminEditingUserId=nid}saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
+$("btnSaveUserInfo").addEventListener("click", async ()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
+if(!nid||!np){showModal({title:"入力不足",big:"⚠️"});return}if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
+if(API_URL){
+  try {
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: JSON.stringify({_action: "upsertStaffUser", token: getToken(), id: nid, pw: np, name: nn||nid, userType: nt}),
+      redirect: "follow"
+    });
+    const r = await resp.json();
+    if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
+    if (nid !== oldId) {
+      const delResp = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain"},
+        body: JSON.stringify({_action: "deleteStaffUser", token: getToken(), id: oldId}),
+        redirect: "follow"
+      });
+      const delResult = await delResp.json();
+      if (!delResult.ok) { showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"}); return; }
+    }
+  } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
+}
+u.name=nn||nid;u.pw=np;u.userType=nt;
+if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
+  if (data.userHourlyRates && data.userHourlyRates[oldId] != null) { data.userHourlyRates[nid] = data.userHourlyRates[oldId]; delete data.userHourlyRates[oldId]; }
+  data.session.adminEditingUserId=nid}
+saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
@@ -669,11 +721,11 @@ if(hasPending){
   const approveBtn=document.createElement("button");approveBtn.className="btn success small";approveBtn.textContent="✅ 承認";
   approveBtn.addEventListener("click",()=>{
     u.stamps=JSON.parse(JSON.stringify(u.pendingStampRequest.stamps));
-    u.pendingStampRequest=null;saveData(data);
+    u.pendingStampRequest={status:"approved",resolvedAt:Date.now()};saveData(data);
     showModal({title:"承認しました",sub:`${u.name||u.id}のスタンプを更新しました`,big:"✅"});renderAdminEdit()});
   const rejectBtn=document.createElement("button");rejectBtn.className="btn danger small";rejectBtn.textContent="❌ 却下";
   rejectBtn.addEventListener("click",()=>{
-    u.pendingStampRequest=null;saveData(data);
+    u.pendingStampRequest={status:"rejected",resolvedAt:Date.now()};saveData(data);
     showModal({title:"却下しました",sub:`${u.name||u.id}の申請を却下しました`,big:"❌"});renderAdminEdit()});
   btnWrap.appendChild(approveBtn);btnWrap.appendChild(rejectBtn);reqBar.appendChild(btnWrap);
 } else {reqBar.className="";}
@@ -1386,17 +1438,32 @@ function showMCDetail(u,y,m){
 function renderAdminNotifications(){
   const completed=data.tasks.filter(t=>t.status==="完了");
   const count=completed.length;
+  const stampReqCount=countPendingStampRequests();
   const notifIds=["adminNotif1","adminNotif2","adminNotif3","adminNotif4","adminNotif5"];
   notifIds.forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
+    const msgs=[];
     if(count>0){
+      msgs.push(`<span class="notif-icon">🔔</span><span>完了になった業務が <span class="notif-count" id="${id}Count">${count}件</span> あります</span>`);
+    }
+    if(stampReqCount>0){
+      msgs.push(`<span class="notif-icon">📨</span><span>スタンプ修正申請が <span class="notif-count notif-stamp-req" id="${id}StampReq">${stampReqCount}件</span> あります</span>`);
+    }
+    if(msgs.length>0){
       el.classList.remove("hidden");
-      el.innerHTML=`<span class="notif-icon">🔔</span><span>完了になった業務が <span class="notif-count" id="${id}Count">${count}件</span> あります</span>`;
+      el.innerHTML=msgs.join('<br style="margin:4px 0;">');
       const countEl=document.getElementById(id+"Count");
       if(countEl){countEl.addEventListener("click",()=>{
-        // Navigate to task list with completed filter
         location.hash="#admin-task-list";
         setTimeout(()=>{$("atlStatus").value="完了";doRenderATL()},100);
+      })}
+      const stampEl=document.getElementById(id+"StampReq");
+      if(stampEl){stampEl.addEventListener("click",()=>{
+        const reqUser=Object.values(data.users).find(u=>u&&u.pendingStampRequest&&u.pendingStampRequest.status==="pending");
+        if(reqUser){
+          data.session.adminEditingUserId=reqUser.id;saveData(data);
+          editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit";
+        } else { location.hash="#admin"; }
       })}
     } else {
       el.classList.add("hidden");el.innerHTML="";

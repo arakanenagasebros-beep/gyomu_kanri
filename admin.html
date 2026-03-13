@@ -289,8 +289,8 @@ if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.admin
 if(h==="#admin-task-list"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminTaskList");renderAdminTaskList();return}
 if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminDropdownEdit");renderDropdownEdit();return}
 if(h==="#admin-month-check"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminMonthCheck");renderMonthCheck();return}
-if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminHome");renderAdminHome();return}
-if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();return}
+if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminHome");forceSyncPull().then(()=>{renderAdminHome()});return}
+if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");forceSyncPull().then(()=>{renderAdminEdit()});return}
 location.hash="#admin-login"}
 window.addEventListener("hashchange",route);
 
@@ -421,6 +421,20 @@ const sra=$("stampRequestArea");sra.innerHTML="";
 if(u.userType==="学生"){
   if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
     sra.innerHTML=`<div style="margin-top:12px;"><span class="stamp-request-badge">📨 スタンプ修正申請中</span></div>`;
+    stampEditMode=false;
+  } else if(u.pendingStampRequest&&u.pendingStampRequest.status==="approved"){
+    const wrap=document.createElement("div");wrap.style.cssText="margin-top:12px;padding:12px;border-radius:12px;background:rgba(107,203,119,.12);border:1.5px solid rgba(107,203,119,.3);text-align:center;";
+    wrap.innerHTML=`<div style="font-weight:900;color:var(--mint);font-size:14px;">✅ スタンプ修正が承認されました！</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">カレンダーに反映済みです</div>`;
+    const dismissBtn=document.createElement("button");dismissBtn.className="btn ghost small";dismissBtn.style.cssText="margin-top:8px;font-size:11px;";dismissBtn.textContent="確認しました";
+    dismissBtn.addEventListener("click",()=>{u.pendingStampRequest=null;saveData(data);renderUserHome()});
+    wrap.appendChild(dismissBtn);sra.appendChild(wrap);
+    stampEditMode=false;
+  } else if(u.pendingStampRequest&&u.pendingStampRequest.status==="rejected"){
+    const wrap=document.createElement("div");wrap.style.cssText="margin-top:12px;padding:12px;border-radius:12px;background:rgba(255,71,87,.08);border:1.5px solid rgba(255,71,87,.2);text-align:center;";
+    wrap.innerHTML=`<div style="font-weight:900;color:var(--red);font-size:14px;">❌ スタンプ修正申請が却下されました</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">必要に応じて再度申請してください</div>`;
+    const dismissBtn=document.createElement("button");dismissBtn.className="btn ghost small";dismissBtn.style.cssText="margin-top:8px;font-size:11px;";dismissBtn.textContent="確認しました";
+    dismissBtn.addEventListener("click",()=>{u.pendingStampRequest=null;saveData(data);renderUserHome()});
+    wrap.appendChild(dismissBtn);sra.appendChild(wrap);
     stampEditMode=false;
   } else if(stampEditMode){
     const cancelBtn=document.createElement("button");cancelBtn.className="btn ghost";cancelBtn.style.cssText="width:100%;margin-top:12px;font-size:13px;padding:10px;";
@@ -748,7 +762,9 @@ else td.textContent=c;tr.appendChild(td)});
 // 申請 column
 const tdReq=document.createElement("td");
 if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
-  tdReq.innerHTML=`<span class="stamp-request-badge" style="font-size:9px;">📨 申請中</span>`;
+  const reqBadge=document.createElement("span");reqBadge.className="stamp-request-badge";reqBadge.style.cssText="font-size:9px;cursor:pointer;";reqBadge.textContent="📨 申請中";
+  reqBadge.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveData(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+  tdReq.appendChild(reqBadge);
 } else {tdReq.textContent="―"}
 tr.appendChild(tdReq);
 const tdE=document.createElement("td");const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="編集";
@@ -855,11 +871,11 @@ if(hasPending){
   const approveBtn=document.createElement("button");approveBtn.className="btn success small";approveBtn.textContent="✅ 承認";
   approveBtn.addEventListener("click",()=>{
     u.stamps=JSON.parse(JSON.stringify(u.pendingStampRequest.stamps));
-    u.pendingStampRequest=null;saveData(data);
+    u.pendingStampRequest={status:"approved",resolvedAt:Date.now()};saveData(data);
     showModal({title:"承認しました",sub:`${u.name||u.id}のスタンプを更新しました`,big:"✅"});renderAdminEdit()});
   const rejectBtn=document.createElement("button");rejectBtn.className="btn danger small";rejectBtn.textContent="❌ 却下";
   rejectBtn.addEventListener("click",()=>{
-    u.pendingStampRequest=null;saveData(data);
+    u.pendingStampRequest={status:"rejected",resolvedAt:Date.now()};saveData(data);
     showModal({title:"却下しました",sub:`${u.name||u.id}の申請を却下しました`,big:"❌"});renderAdminEdit()});
   btnWrap.appendChild(approveBtn);btnWrap.appendChild(rejectBtn);reqBar.appendChild(btnWrap);
 } else {reqBar.className="";}
@@ -1727,26 +1743,39 @@ function showMCDetail(u,y,m){
 function renderAdminNotifications(){
   const completed=data.tasks.filter(t=>t.status==="完了");
   const count=completed.length;
+  const stampReqCount=countPendingStampRequests();
   const notifIds=["adminNotif1","adminNotif2","adminNotif3","adminNotif4","adminNotif5"];
   notifIds.forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
+    const msgs=[];
     if(count>0){
+      msgs.push(`<span class="notif-icon">🔔</span><span>完了になった業務が <span class="notif-count" id="${id}Count">${count}件</span> あります</span>`);
+    }
+    if(stampReqCount>0){
+      msgs.push(`<span class="notif-icon">📨</span><span>スタンプ修正申請が <span class="notif-count notif-stamp-req" id="${id}StampReq">${stampReqCount}件</span> あります</span>`);
+    }
+    if(msgs.length>0){
       el.classList.remove("hidden");
-      el.innerHTML=`<span class="notif-icon">🔔</span><span>完了になった業務が <span class="notif-count" id="${id}Count">${count}件</span> あります</span>`;
+      el.innerHTML=msgs.join('<br style="margin:4px 0;">');
       const countEl=document.getElementById(id+"Count");
       if(countEl){countEl.addEventListener("click",()=>{
-        // Navigate to task list with completed filter
         location.hash="#admin-task-list";
         setTimeout(()=>{$("atlStatus").value="完了";doRenderATL()},100);
+      })}
+      const stampEl=document.getElementById(id+"StampReq");
+      if(stampEl){stampEl.addEventListener("click",()=>{
+        // スタンプ申請がある最初のユーザーの編集画面へ遷移
+        const reqUser=Object.values(data.users).find(u=>u&&u.pendingStampRequest&&u.pendingStampRequest.status==="pending");
+        if(reqUser){
+          data.session.adminEditingUserId=reqUser.id;saveData(data);
+          editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit";
+        } else { location.hash="#admin"; }
       })}
     } else {
       el.classList.add("hidden");el.innerHTML="";
     }
   });
 }
-
-
-/* === ADMIN CREDENTIAL CHANGE === */
 function renderAdminCreds() {
   $("adminCredId").value = "";
   $("adminCredOldPw").value = "";
