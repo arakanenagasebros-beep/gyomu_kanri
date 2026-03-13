@@ -1,0 +1,67 @@
+/* admin.css - 管理画面専用スタイル */
+.admin-theme .card{border:1px solid rgba(77,150,255,.08);}
+.admin-theme .topbar{margin-bottom:18px;}
+.admin-theme .tableWrap{border-radius:14px;overflow:auto;background:#fff;border:1px solid rgba(77,150,255,.08);}
+.admin-theme thead th{background:linear-gradient(180deg,rgba(77,150,255,.12),rgba(77,150,255,.08));}
+.admin-theme tbody tr:hover{background:linear-gradient(90deg,rgba(255,215,61,.06),rgba(255,154,86,.03));}
+.admin-theme .btn.primary{box-shadow:0 8px 20px rgba(77,150,255,.15);}
+.admin-theme .summary-chip{box-shadow:0 8px 18px rgba(77,150,255,.08);}
+/* === AUTH === */
+.authGrid { display: flex; justify-content: center; padding: 40px 0; }
+.authGrid .card { max-width: 400px; width: 100%; }
+.err { display: none; color: var(--red); font-size: 12px; padding: 8px 12px; background: rgba(255,71,87,.08); border-radius: 8px; margin-bottom: 10px; font-weight: 700; }
+label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+input, select, textarea {
+  width: 100%; font-family: var(--font-main); font-size: 14px;
+  padding: 10px 12px; border: 1.5px solid rgba(0,0,0,.1);
+  border-radius: 10px; background: rgba(255,255,255,.8);
+  transition: border-color .2s;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--blue); }
+textarea { min-height: 80px; resize: vertical; }
+
+/* === ADMIN TABS === */
+.admin-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+.admin-tab {
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  background: rgba(0,0,0,.03); border: 1.5px solid transparent;
+  transition: all .2s; white-space: nowrap;
+}
+.admin-tab:hover { background: rgba(77,150,255,.06); }
+.admin-tab.active { background: rgba(77,150,255,.1); border-color: rgba(77,150,255,.2); color: var(--blue); font-weight: 700; }
+.sub-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.sub-tab {
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  background: rgba(0,0,0,.03); border: 1px solid transparent; transition: all .2s;
+}
+.sub-tab:hover { background: rgba(77,150,255,.06); }
+.sub-tab.active { background: rgba(77,150,255,.08); border-color: rgba(77,150,255,.15); color: var(--blue); }
+
+/* === ADMIN NOTIFICATION === */
+.admin-notification {
+  padding: 12px 16px; border-radius: 12px; margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(255,215,61,.1), rgba(255,154,86,.08));
+  border: 1.5px solid rgba(255,154,86,.2); font-size: 13px; font-weight: 700;
+}
+.notif-icon { margin-right: 4px; }
+.notif-count { color: var(--pink); cursor: pointer; text-decoration: underline; }
+.notif-stamp-req { color: var(--orange); }
+
+/* === ADMIN REQUEST INFO === */
+.admin-request-info {
+  margin-top: 12px; padding: 14px; border-radius: 12px;
+  background: rgba(255,154,86,.08); border: 1.5px solid rgba(255,154,86,.2);
+}
+.ari-title { font-weight: 900; font-size: 14px; color: var(--orange); margin-bottom: 6px; }
+
+/* === DROPDOWN EDIT === */
+.dd-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,.04); gap: 8px; }
+.dd-info { flex: 1; min-width: 0; }
+.dd-price { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.dd-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.dd-edit-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.dd-edit-overlay[style*="display: none"] { display: none !important; }
+.dd-edit-modal { background: #fff; border-radius: var(--radius); padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+

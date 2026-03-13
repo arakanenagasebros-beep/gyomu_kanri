@@ -1,0 +1,69 @@
+/* staff.css - スタッフ画面専用スタイル */
+.staff-theme .topbar{margin-bottom:16px;}
+.staff-theme .stamp-screen{padding-top:26px;}
+.staff-theme .big-stamp-btn{box-shadow:0 16px 40px rgba(255,107,157,.22);}
+.staff-theme .card{border:1px solid rgba(255,107,157,.06);}
+.staff-theme .progress-bar{box-shadow:inset 0 1px 2px rgba(0,0,0,.06);}
+.staff-theme .stamp-actions .btn.active,.staff-theme .sub-tab.active{box-shadow:0 8px 18px rgba(255,107,157,.14);}
+/* === STAMP SCREEN === */
+.stamp-screen { text-align: center; padding: 20px 0; }
+.greeting { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.date-display { font-family: var(--font-display); font-size: 28px; font-weight: 900; color: var(--pink); margin-bottom: 16px; }
+.big-stamp-btn {
+  width: 180px; height: 180px; border-radius: 50%;
+  background: var(--grad1); color: #fff; border: none;
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  margin: 20px auto; box-shadow: 0 8px 32px rgba(255,107,157,.3);
+  transition: all .3s; font-family: var(--font-display);
+}
+.big-stamp-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 12px 40px rgba(255,107,157,.4); }
+.big-stamp-btn:active:not(:disabled) { transform: scale(.95); }
+.big-stamp-btn .emoji { font-size: 48px; }
+.big-stamp-btn .label { font-size: 14px; font-weight: 700; }
+.big-stamp-btn.done { background: #ddd; box-shadow: none; cursor: default; }
+.stamp-actions { display: flex; justify-content: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+.rank-info { margin-top: 16px; }
+
+/* === STAMP DONE BANNER === */
+.stamp-done-banner {
+  text-align: center; padding: 14px; margin-bottom: 12px;
+  border-radius: var(--radius); border: 2px solid rgba(107,203,119,.25);
+  background: linear-gradient(135deg, rgba(107,203,119,.1), rgba(107,203,119,.05));
+}
+.sdb-emoji { font-size: 28px; }
+.sdb-text { font-family: var(--font-display); font-weight: 900; font-size: 16px; color: var(--mint); }
+.sdb-sub { font-size: 12px; color: var(--muted); }
+
+/* === RANK === */
+.rank-badge { display: inline-block; font-family: var(--font-display); font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: rgba(255,215,61,.15); color: var(--orange); border: 1px solid rgba(255,215,61,.3); }
+
+/* === PROGRESS === */
+.progress-wrap { margin-top: 8px; }
+.progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.progress-bar { height: 8px; background: rgba(0,0,0,.06); border-radius: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--grad1); border-radius: 8px; transition: width .5s; }
+
+/* === LOTTERY === */
+.lottery-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 1001; display: flex; align-items: center; justify-content: center; }
+.lottery-overlay[style*="display: none"] { display: none !important; }
+.lottery-overlay[style*="display: block"] { display: flex !important; }
+.lottery-box { background: #fff; border-radius: 20px; padding: 30px; text-align: center; max-width: 400px; width: 90%; }
+.lottery-title { font-family: var(--font-display); font-size: 20px; font-weight: 900; margin-bottom: 4px; }
+.lottery-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+.lottery-cards { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.lottery-card {
+  width: 80px; height: 100px; border-radius: 12px;
+  background: var(--grad1); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .3s; box-shadow: 0 4px 12px rgba(255,107,157,.2);
+}
+.lottery-card .card-val { color: #fff; font-family: var(--font-display); text-align: center; opacity: 0; transition: opacity .3s; }
+.lottery-card.revealed .card-val { opacity: 1; }
+.lottery-card .pt-num { font-size: 28px; font-weight: 900; display: block; }
+.lottery-card:hover:not(.disabled):not(.selected) { transform: translateY(-4px); }
+.lottery-card.selected { background: linear-gradient(135deg, #ffd93d, #ff9a56); transform: scale(1.1); }
+.lottery-card.disabled { opacity: .4; cursor: default; }
+.lottery-result { font-family: var(--font-display); font-size: 20px; font-weight: 900; margin-top: 16px; min-height: 28px; }
+.lottery-close { margin-top: 12px; }
+

@@ -1,12 +1,10 @@
 /* === VIEWS (staff-specific) === */
 const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHome"),reportInput:$("reportInput"),reportConfirm:$("reportConfirm"),staffTaskList:$("staffTaskList"),adminAuth:_noop,adminReportMgmt:_noop,adminReportDetail:_noop,adminTaskList:_noop,adminDropdownEdit:_noop,adminHome:_noop,adminEdit:_noop,adminMonthCheck:_noop};
-const on=(id,ev,fn,opt)=>{const el=$(id);if(el)el.addEventListener(ev,fn,opt);return el};
-
 
 /* === MODAL/ESCAPE SETUP === */
-on("mClose","click",hideModal);on("overlay","click",e=>{if(e.target===$("overlay"))hideModal()});
+$("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
-on("lotteryClose","click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
+$("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
@@ -25,10 +23,10 @@ window.addEventListener("hashchange",route);
 // Nav helpers (staff only - admin refs safely ignored via _noop)
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
 function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
-on("stampLogout","click",doLogout);on("userLogout","click",doLogout);on("confirmLogout","click",doLogout);on("stlLogout","click",doLogout);
+$("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventListener("click",doLogout);$("confirmLogout").addEventListener("click",doLogout);$("stlLogout").addEventListener("click",doLogout);
 
 // Login
-on("btnUserLogin","click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
+$("btnUserLogin").addEventListener("click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
 if(!API_URL){$("userAuthErr").textContent="API未接続です（⚙で設定）";$("userAuthErr").style.display="block";return}
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginStaff",id,pw}),redirect:"follow"});
@@ -49,27 +47,27 @@ try{
   }
 }catch(e){$("userAuthErr").textContent="通信エラー";$("userAuthErr").style.display="block";}
 });
-on("userLoginPw","keydown",e=>{if(e.key==="Enter")$("btnUserLogin").click()});
+$("userLoginPw").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnUserLogin").click()});
 
 // Nav buttons
 let rpTransportLocked=false;
-on("goToCalendarFromStamp","click",()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});
-on("goToStamp","click",()=>location.hash="#user-stamp");
-on("stampGoReport","click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
-on("stampGoReportList","click",()=>location.hash="#report-confirm");
-on("stampGoTaskList","click",()=>location.hash="#staff-task-list");
-on("btnGoReport","click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
-on("btnGoReportList","click",()=>location.hash="#report-confirm");
-on("btnGoTaskListFromCal","click",()=>location.hash="#staff-task-list");
-on("reportBackToCal","click",()=>{
+$("goToCalendarFromStamp").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});
+$("goToStamp").addEventListener("click",()=>location.hash="#user-stamp");
+$("stampGoReport").addEventListener("click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
+$("stampGoReportList").addEventListener("click",()=>location.hash="#report-confirm");
+$("stampGoTaskList").addEventListener("click",()=>location.hash="#staff-task-list");
+$("btnGoReport").addEventListener("click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
+$("btnGoReportList").addEventListener("click",()=>location.hash="#report-confirm");
+$("btnGoTaskListFromCal").addEventListener("click",()=>location.hash="#staff-task-list");
+$("reportBackToCal").addEventListener("click",()=>{
   if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=adminEditOrigUserId;saveLocalOnly(data);editingReportIdx=-1;location.hash="#admin-report-detail";return}
   const u=data.users[data.session.userId];location.hash=u&&u.userType==="社会人"?"#report-confirm":"#user"});
-on("confirmBackToCal","click",()=>{const u=data.users[data.session.userId];if(u&&u.userType==="社会人")return;location.hash="#user"});
-on("confirmGoTask","click",()=>location.hash="#staff-task-list");
-on("btnNewReport","click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
-on("stlBack","click",()=>{const u=data.users[data.session.userId];
+$("confirmBackToCal").addEventListener("click",()=>{const u=data.users[data.session.userId];if(u&&u.userType==="社会人")return;location.hash="#user"});
+$("confirmGoTask").addEventListener("click",()=>location.hash="#staff-task-list");
+$("btnNewReport").addEventListener("click",()=>{editingReportIdx=-1;rpTransportLocked=false;location.hash="#report-input"});
+$("stlBack").addEventListener("click",()=>{const u=data.users[data.session.userId];
 if(u&&u.userType==="社会人"){location.hash="#report-confirm";}else{location.hash="#user";}});
-on("stlBackToReport","click",()=>location.hash="#report-confirm");
+$("stlBackToReport").addEventListener("click",()=>location.hash="#report-confirm");
 
 // Admin tabs
 const tabNav=(rm,sm,tl,dd,mc)=>{$(rm).addEventListener("click",()=>location.hash="#admin-report-mgmt");$(sm).addEventListener("click",()=>location.hash="#admin");$(tl).addEventListener("click",()=>location.hash="#admin-task-list");$(dd).addEventListener("click",()=>location.hash="#admin-dropdown-edit");if(mc)$(mc).addEventListener("click",()=>location.hash="#admin-month-check")};
@@ -86,7 +84,7 @@ if(stamped){btn.classList.add("done");btn.querySelector(".emoji").textContent="�
 else if(failed){btn.classList.add("done");btn.querySelector(".emoji").textContent="❌";btn.querySelector(".label").textContent="本日不可";btn.disabled=true;$("stampAlreadyMsg").classList.add("hidden")}
 else{btn.classList.remove("done");btn.querySelector(".emoji").textContent="👆";btn.querySelector(".label").textContent="出勤スタンプ";btn.disabled=false;$("stampAlreadyMsg").classList.add("hidden")}}
 
-on("bigStampBtn","click",async ()=>{const u=data.users[data.session.userId];if(!u)return;const now=new Date(),key=ymd(now);if(u.stamps[key])return;
+$("bigStampBtn").addEventListener("click",async ()=>{const u=data.users[data.session.userId];if(!u)return;const now=new Date(),key=ymd(now);if(u.stamps[key])return;
 if(u.stampFailed===key){showModal({title:"本日のスタンプ不可",sub:"合言葉を間違えたため、今日はスタンプを押せません。",big:"🚫"});return}
 const ans=prompt("合言葉は？");if(ans===null)return;
 try{const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"verifyDailyPassword",token:getToken(),answer:ans}),redirect:"follow"});const r=await resp.json();if(!(r.ok&&r.match)){u.stampFailed=key;saveData(data);const btn=$("bigStampBtn");btn.classList.add("done");btn.querySelector(".emoji").textContent="❌";btn.querySelector(".label").textContent="本日不可";btn.disabled=true;showModal({title:"合言葉が違います",sub:"今日はスタンプを押せません。",big:"❌"});return}}catch(e){showModal({title:"通信エラー",sub:"合言葉確認に失敗しました。",big:"📡"});return}
@@ -115,9 +113,9 @@ function renderProgress(el,total){
 
 /* === USER CALENDAR === */
 let userMonthCursor=startOfMonth(new Date());
-on("uPrev","click",()=>{userMonthCursor=addMonths(userMonthCursor,-1);renderUserHome()});
-on("uNext","click",()=>{userMonthCursor=addMonths(userMonthCursor,+1);renderUserHome()});
-on("uThis","click",()=>{userMonthCursor=startOfMonth(new Date());renderUserHome()});
+$("uPrev").addEventListener("click",()=>{userMonthCursor=addMonths(userMonthCursor,-1);renderUserHome()});
+$("uNext").addEventListener("click",()=>{userMonthCursor=addMonths(userMonthCursor,+1);renderUserHome()});
+$("uThis").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date());renderUserHome()});
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
@@ -216,11 +214,11 @@ const years=[];for(let y=2025;y<=2030;y++)years.push(String(y));popSel($("rpYear
 $("rpDate").value=ymd(new Date());$("rpWorkType").value="出勤";$("rpTransport").value="";$("rpTextCode").value="";$("rpContent").value="";toggleWorkType();calcWorkTime();
 if(editingReportIdx>=0&&u.reports[editingReportIdx]){const r=u.reports[editingReportIdx];$("rpDate").value=r.date||ymd(new Date());$("rpWorkType").value=r.workType||"出勤";if(r.startH)$("rpStartH").value=r.startH;if(r.startM)$("rpStartM").value=r.startM;if(r.endH)$("rpEndH").value=r.endH;if(r.endM)$("rpEndM").value=r.endM;if(r.breakTime)$("rpBreak").value=r.breakTime;if(r.taskType)$("rpTaskType").value=r.taskType;if(r.manHours)$("rpManHours").value=r.manHours;$("rpTransport").value=r.transport||"";if(r.bizId)$("rpBizId").value=r.bizId;if(r.productId)$("rpProductId").value=r.productId;if(r.serviceId)$("rpServiceId").value=r.serviceId;$("rpTextCode").value=r.textCode||"";if(r.year)$("rpYear").value=r.year;$("rpContent").value=r.content||"";toggleWorkType();calcWorkTime()}}
 function toggleWorkType(){$("taskSection").classList.toggle("hidden",$("rpWorkType").value==="出勤");$("officeSection").classList.toggle("hidden",$("rpWorkType").value==="在宅")}
-on("rpWorkType","change",toggleWorkType);
+$("rpWorkType").addEventListener("change",toggleWorkType);
 function calcWorkTime(){const sh=parseInt($("rpStartH").value)||0,sm=parseInt($("rpStartM").value)||0,eh=parseInt($("rpEndH").value)||0,em=parseInt($("rpEndM").value)||0,brk=parseInt($("rpBreak").value)||0;let d=(eh*60+em)-(sh*60+sm)-brk;if(d<0)d=0;$("rpWorkTime").value=`${Math.floor(d/60)}時間${d%60>0?d%60+"分":""}`}
 ["rpStartH","rpStartM","rpEndH","rpEndM","rpBreak"].forEach(id=>$(id).addEventListener("change",calcWorkTime));
 ["rpTransport","rpTextCode"].forEach(id=>$(id).addEventListener("input",function(){this.value=this.value.replace(/[^0-9]/g,"")}));
-on("btnAddReport","click",()=>{const u=data.users[data.session.userId];if(!u)return;const wt=$("rpWorkType").value;
+$("btnAddReport").addEventListener("click",()=>{const u=data.users[data.session.userId];if(!u)return;const wt=$("rpWorkType").value;
 const e={date:$("rpDate").value,workType:wt,startH:$("rpStartH").value,startM:$("rpStartM").value,endH:$("rpEndH").value,endM:$("rpEndM").value,breakTime:$("rpBreak").value,workTime:$("rpWorkTime").value};
 if(wt==="在宅"){e.taskType=$("rpTaskType").value;e.manHours=$("rpManHours").value}else{e.transport=$("rpTransport").value;e.bizId=$("rpBizId").value;e.productId=$("rpProductId").value;e.serviceId=$("rpServiceId").value;e.textCode=$("rpTextCode").value;e.year=$("rpYear").value}
 e.content=$("rpContent").value;e.proofCount=0;
@@ -230,7 +228,7 @@ if(adminEditingReportMode){adminEditingReportMode=false;data.session.userId=admi
 else{location.hash="#report-confirm"}});
 
 /* Add and continue same-day */
-on("btnAddAndContinue","click",()=>{
+$("btnAddAndContinue").addEventListener("click",()=>{
   const u=data.users[data.session.userId];if(!u)return;const wt=$("rpWorkType").value;
   const e={date:$("rpDate").value,workType:wt,startH:$("rpStartH").value,startM:$("rpStartM").value,endH:$("rpEndH").value,endM:$("rpEndM").value,breakTime:$("rpBreak").value,workTime:$("rpWorkTime").value};
   if(wt==="在宅"){e.taskType=$("rpTaskType").value;e.manHours=$("rpManHours").value}else{e.transport=rpTransportLocked?"0":$("rpTransport").value;e.bizId=$("rpBizId").value;e.productId=$("rpProductId").value;e.serviceId=$("rpServiceId").value;e.textCode=$("rpTextCode").value;e.year=$("rpYear").value}
@@ -298,17 +296,17 @@ tdE.appendChild(btn);tr.appendChild(tdE);tb.appendChild(tr)});$("armMeta").textC
 ["armFilterYear","armFilterMonth","armFilterType","armFilterUserType"].forEach(id=>$(id).addEventListener("change",doRenderARM));
 
 // ARM sub-tabs: サマリー / ユーザー追加
-on("armSubTabSummary","click",()=>{
+$("armSubTabSummary").addEventListener("click",()=>{
   $("armSubTabSummary").classList.add("active");$("armSubTabAddUser").classList.remove("active");
   $("armSummaryCard").classList.remove("hidden");$("armAddUserCard").classList.add("hidden");
 });
-on("armSubTabAddUser","click",()=>{
+$("armSubTabAddUser").addEventListener("click",()=>{
   $("armSubTabAddUser").classList.add("active");$("armSubTabSummary").classList.remove("active");
   $("armAddUserCard").classList.remove("hidden");$("armSummaryCard").classList.add("hidden");
 });
 
 // ARM Excel Export
-on("armExportExcel","click",()=>{
+$("armExportExcel").addEventListener("click",()=>{
   const y=$("armFilterYear").value,m=$("armFilterMonth").value,wt=$("armFilterType").value,ut=$("armFilterUserType").value;
   let users=Object.values(data.users);
   if(ut!=="全て")users=users.filter(u=>(u.userType||"学生")===ut);
@@ -342,7 +340,7 @@ tr:nth-child(even){background:#F2F2F2;}
 });
 
 // User add (moved here)
-on("btnAddUser","click", async ()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
+$("btnAddUser").addEventListener("click", async ()=>{const id=$("newUserId").value.trim(),pw=$("newUserPw").value.trim(),name=$("newUserName").value.trim()||id,utype=$("newUserType").value;
 if(!id||!pw){showModal({title:"入力不足",big:"⚠️"});return}if(data.users[id]){showModal({title:"ID重複",big:"🧩"});return}
 if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
 try{
@@ -452,15 +450,15 @@ const sh=parseInt(r.startH)||0,sm=parseInt(r.startM)||0,eh=parseInt(r.endH)||0,e
 let d=(eh*60+em)-(sh*60+sm)-brk;if(d<0)d=0;r.workTime=`${Math.floor(d/60)}時間${d%60>0?d%60+"分":""}`;saveData(data);doRenderARD()};
 inp.addEventListener("blur",save);inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&field!=="content"){e.preventDefault();inp.blur()}})};
 ["ardFilterYear","ardFilterMonth","ardFilterType"].forEach(id=>$(id).addEventListener("change",doRenderARD));
-on("ardBack","click",()=>{data.session.adminReportEditingUserId="";ardInit=false;saveLocalOnly(data);location.hash="#admin-report-mgmt"});
-on("ardExport","click",()=>{const u=data.users[data.session.adminReportEditingUserId];if(!u)return;const y=$("ardFilterYear").value,m=$("ardFilterMonth").value,wt=$("ardFilterType").value;const f=filterReports(u.reports,y,m,wt);
+$("ardBack").addEventListener("click",()=>{data.session.adminReportEditingUserId="";ardInit=false;saveLocalOnly(data);location.hash="#admin-report-mgmt"});
+$("ardExport").addEventListener("click",()=>{const u=data.users[data.session.adminReportEditingUserId];if(!u)return;const y=$("ardFilterYear").value,m=$("ardFilterMonth").value,wt=$("ardFilterType").value;const f=filterReports(u.reports,y,m,wt);
 let csv="\uFEFF#,日付,形態,開始,終了,休憩,勤務,給与,交通費,業務ID,商品ID,ｻｰﾋﾞｽID,ﾃｷｽﾄｺｰﾄﾞ,年度,業務種類,工数,内容,校正回数,校正金額\n";
 f.forEach((r,i)=>{const sal=Math.round(calcReportSalary(r,u.id));const pc=r.proofCount||0;csv+=[i+1,r.date,r.workType,`${r.startH}:${r.startM}`,`${r.endH}:${r.endM}`,r.breakTime,r.workTime,sal,r.transport||0,r.bizId||"",r.productId||"",r.serviceId||"",r.textCode||"",r.year||"",r.taskType||"",r.manHours||"",`"${(r.content||"").replace(/"/g,'""')}"`,pc,pc*500].join(",")+"\n"});
 const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`業務日報_${u.name||u.id}.csv`;document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📥"})});
 
 /* === ADMIN STAMP HOME === */
-on("btnExport","click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
-on("btnResetAll","click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
+$("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
+$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
 function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin(false).then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
@@ -483,12 +481,12 @@ tdE.appendChild(btn);tr.appendChild(tdE);tb.appendChild(tr)});$("adminMeta").tex
 
 /* === ADMIN EDIT === */
 let editMonthCursor=startOfMonth(new Date());
-on("ePrev","click",()=>{editMonthCursor=addMonths(editMonthCursor,-1);renderAdminEdit()});
-on("eNext","click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
-on("eThis","click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
-on("backToAdminHome","click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
-on("resetThisUser","click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
-on("btnSaveUserInfo","click", async ()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
+$("ePrev").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,-1);renderAdminEdit()});
+$("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
+$("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
+$("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
+$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
+$("btnSaveUserInfo").addEventListener("click", async ()=>{const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
 if(!nid){showModal({title:"入力不足",sub:"IDは必須です",big:"⚠️"});return}if(nid!==oldId&&data.users[nid]){showModal({title:"ID重複",big:"🧩"});return}
 if(API_URL){
   try {
@@ -518,7 +516,7 @@ if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
   data.session.adminEditingUserId=nid}
 saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
-$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value="";$("editUserType").value=u.userType||"学生";
+$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -852,15 +850,15 @@ $("fileOverlay").style.display="block";$("fileInput").value="";
 if(fileUploadMode==="admin-attach"){$("fileSubmitBtn").textContent="ファイル添付 ✅";$("fileSubmitDirectBtn").textContent="添付せず閉じる"}
 else if(fileUploadMode==="admin-irai"){$("fileSubmitBtn").textContent="依頼中に変更 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで依頼中に変更"}
 else{$("fileSubmitBtn").textContent="完了 ✅";$("fileSubmitDirectBtn").textContent="提出（ファイルなしでも完了）"}}
-on("fileOverlayClose","click",()=>{$("fileOverlay").style.display="none"});
+$("fileOverlayClose").addEventListener("click",()=>{$("fileOverlay").style.display="none"});
 const dz=$("dropZone");
 dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over")});
 dz.addEventListener("dragleave",()=>dz.classList.remove("over"));
 dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("over");const files=e.dataTransfer.files;if(files.length)handleFiles(files)});
 dz.addEventListener("click",()=>$("fileInput").click());
-on("fileInput","change",e=>{if(e.target.files.length)handleFiles(e.target.files)});
+$("fileInput").addEventListener("change",e=>{if(e.target.files.length)handleFiles(e.target.files)});
 function handleFiles(files){if(!fileUploadTask)return;for(let i=0;i<files.length;i++){pendingFiles.push(files[i])}renderFileList()}
-on("fileSubmitBtn","click",async ()=>{if(!fileUploadTask)return;
+$("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return;
   // Upload files to Drive if API is configured
   for(var i=0;i<pendingFiles.length;i++){
     var f=pendingFiles[i];
@@ -889,7 +887,7 @@ on("fileSubmitBtn","click",async ()=>{if(!fileUploadTask)return;
       if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList()});
   }});
 
-on("fileSubmitDirectBtn","click",async ()=>{
+$("fileSubmitDirectBtn").addEventListener("click",async ()=>{
   if(!fileUploadTask)return;
   const baseTask = data.tasks.find(x=>x.id===fileUploadTask.id) || fileUploadTask;
   for(var i=0;i<pendingFiles.length;i++){
@@ -951,9 +949,9 @@ populateStaffSelect($("taStaff"),"未指定");
 applyTaskTypeLogic();
 renderTextCodeInputs([""]);$("taskAddOverlay").style.display="block"}
 
-on("taStaff","change",()=>{applyTaskTypeLogic()});
-on("taWorkType","change",()=>{applyTaskTypeLogic()});
-on("taTaskType","change",()=>{
+$("taStaff").addEventListener("change",()=>{applyTaskTypeLogic()});
+$("taWorkType").addEventListener("change",()=>{applyTaskTypeLogic()});
+$("taTaskType").addEventListener("change",()=>{
   const staffName=$("taStaff").value;
   const wt=$("taWorkType").value;
   const tt=$("taTaskType").value;
@@ -969,7 +967,7 @@ popSel($("taTaskType"),getTaskTypes(),t.taskType);popSel($("taEmployee"),getEmpl
 populateStaffSelect($("taStaff"),t.staff||"未指定");
 applyTaskTypeLogic();
 renderTextCodeInputs(t.textCodes&&t.textCodes.length?t.textCodes:[""]);$("taskAddOverlay").style.display="block"}
-on("taskAddClose","click",()=>{$("taskAddOverlay").style.display="none"});
+$("taskAddClose").addEventListener("click",()=>{$("taskAddOverlay").style.display="none"});
 function renderTextCodeInputs(codes){
   const area=$("taTextCodesArea");area.innerHTML="";
   codes.forEach((c,i)=>{
@@ -985,7 +983,7 @@ function renderTextCodeInputs(codes){
   });
 }
 function getTextCodes(){return Array.from($("taTextCodesArea").querySelectorAll("input")).map(i=>i.value)}
-on("taskAddSave","click",()=>{
+$("taskAddSave").addEventListener("click",()=>{
   const wt=$("taWorkType").value;const tc=getTextCodes().filter(x=>x);
   if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);if(!t)return;
@@ -1004,7 +1002,7 @@ on("taskAddSave","click",()=>{
     if(newT){renderAdminTaskList();openFileUpload(newT,"admin-attach");return}
   }
   if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList()});
-on("atlAddTask","click",openTaskAdd);
+$("atlAddTask").addEventListener("click",openTaskAdd);
 
 /* === STAFF TASK LIST === */
 let stlInit=false;
@@ -1023,7 +1021,7 @@ function renderPriceList(container){
   });
   panel.appendChild(grid);container.appendChild(panel);
 }
-on("stlPriceListToggle","click",()=>{
+$("stlPriceListToggle").addEventListener("click",()=>{
   stlPriceListOpen=!stlPriceListOpen;
   const area=$("stlPriceListArea");
   if(stlPriceListOpen){area.classList.remove("hidden");renderPriceList(area);$("stlPriceListToggle").textContent="💰 単価一覧を閉じる"}
@@ -1129,10 +1127,10 @@ function openDdEdit(idx){
   $("ddEditPrice").value=(name==="時給"||name==="その他（時給）"?"":price!=null?String(price):"");
   $("ddEditOverlay").style.display="block";
 }
-on("ddEditClose","click",()=>{$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
-on("ddEditOverlay","click",e=>{if(e.target===$("ddEditOverlay"))$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
-on("ddEditPrice","input",function(){this.value=this.value.replace(/[^0-9]/g,"")});
-on("ddEditSave","click",()=>{
+$("ddEditClose").addEventListener("click",()=>{$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
+$("ddEditOverlay").addEventListener("click",e=>{if(e.target===$("ddEditOverlay"))$("ddEditOverlay").style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"});
+$("ddEditPrice").addEventListener("input",function(){this.value=this.value.replace(/[^0-9]/g,"")});
+$("ddEditSave").addEventListener("click",()=>{
   if(ddEditIdx<0)return;
   const oldName=data.taskTypes[ddEditIdx];
   const newName=$("ddEditName").value.trim();
@@ -1151,16 +1149,16 @@ on("ddEditSave","click",()=>{
   renderDropdownEdit();
   showModal({title:"更新完了",big:"✅"});
 });
-on("ddAddTaskType","click",()=>{const v=$("ddNewTaskType").value.trim();if(!v)return;data.taskTypes.push(v);const p=parseInt($("ddNewTaskPrice").value);if(!isNaN(p)){if(!data.taskPrices)data.taskPrices={};data.taskPrices[v]=p}saveData(data);$("ddNewTaskType").value="";$("ddNewTaskPrice").value="";renderDropdownEdit()});
-on("ddNewTaskPrice","input",function(){this.value=this.value.replace(/[^0-9]/g,"")});
-on("ddAddEmployee","click",()=>{const v=$("ddNewEmployee").value.trim();if(!v)return;data.employees.push(v);saveData(data);$("ddNewEmployee").value="";renderDropdownEdit()});
+$("ddAddTaskType").addEventListener("click",()=>{const v=$("ddNewTaskType").value.trim();if(!v)return;data.taskTypes.push(v);const p=parseInt($("ddNewTaskPrice").value);if(!isNaN(p)){if(!data.taskPrices)data.taskPrices={};data.taskPrices[v]=p}saveData(data);$("ddNewTaskType").value="";$("ddNewTaskPrice").value="";renderDropdownEdit()});
+$("ddNewTaskPrice").addEventListener("input",function(){this.value=this.value.replace(/[^0-9]/g,"")});
+$("ddAddEmployee").addEventListener("click",()=>{const v=$("ddNewEmployee").value.trim();if(!v)return;data.employees.push(v);saveData(data);$("ddNewEmployee").value="";renderDropdownEdit()});
 
 /* === INIT === */
 
 /* === MONTH CHECK === */
-on("mcLogout","click",doAdminLogout);
+$("mcLogout").addEventListener("click",doAdminLogout);
 tabNav("tabRM5","tabSM5","tabTL5","tabDD5","tabMC5");
-on("mcDetailClose","click",()=>$("mcDetailCard").classList.add("hidden"));
+$("mcDetailClose").addEventListener("click",()=>$("mcDetailCard").classList.add("hidden"));
 let mcInit=false;
 function renderMonthCheck(){
   renderAdminNotifications();
@@ -1173,8 +1171,8 @@ function renderMonthCheck(){
     for(let m=1;m<=12;m++){const o=document.createElement("option");o.value=m;o.textContent=m+"月";mSel.appendChild(o)}
     mSel.value=String(now.getMonth()+1);
     mcInit=true;
-    on("mcYear","change",doRenderMC);
-    on("mcMonth","change",doRenderMC);
+    $("mcYear").addEventListener("change",doRenderMC);
+    $("mcMonth").addEventListener("change",doRenderMC);
   }
   doRenderMC();
 }
