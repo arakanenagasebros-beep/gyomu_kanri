@@ -90,7 +90,7 @@ const tabNav=(rm,sm,tl,dd,mc)=>{$(rm).addEventListener("click",()=>location.hash
 tabNav("tabRM","tabSM","tabTL","tabDD","tabMC");tabNav("tabRM2","tabSM2","tabTL2","tabDD2","tabMC2");tabNav("tabRM3","tabSM3","tabTL3","tabDD3","tabMC3");tabNav("tabRM4","tabSM4","tabTL4","tabDD4","tabMC4");
 
 /* === STAMP SCREEN === */
-function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderStampScreen(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
 const now=new Date(),total=countTotal(u),stamped=!!u.stamps[ymd(now)];
 $("stampUserName").textContent=u.name||u.id;$("stampDate").textContent=`${now.getMonth()+1}月${now.getDate()}日（${dowJa(now)}）`;
 renderRankBadge($("stampRankBadge"),total);renderProgress($("stampRankInfo"),total);
@@ -134,7 +134,7 @@ $("uThis").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date()
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
-function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
+function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
@@ -673,18 +673,29 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       cells[key] = { cell, stampEl: st };
     }
     mount.appendChild(frag);
-    mount._calendarState = { monthKey, cells };
+    mount._calendarState = { monthKey, cells, clickable: !!clickable };
     return;
   }
 
+  const clickableChanged = state.clickable !== !!clickable;
   Object.keys(state.cells).forEach(key => {
     const ref = state.cells[key];
     const s = getStampState(key);
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
     ref.cell.classList.toggle("clickable", !!clickable);
-    if (!clickable) ref.cell.onclick = null;
+    if (clickableChanged || !!clickable) {
+      const newCell = ref.cell.cloneNode(true);
+      ref.cell.parentNode.replaceChild(newCell, ref.cell);
+      ref.cell = newCell;
+      ref.stampEl = newCell.querySelector(".stamp");
+      if (clickable && onDayClick) {
+        const d = new Date(key + "T00:00:00");
+        newCell.addEventListener("click", () => onDayClick(d));
+      }
+    }
   });
+  mount._calendarState.clickable = !!clickable;
 }
 
 
