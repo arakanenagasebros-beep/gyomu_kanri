@@ -524,7 +524,7 @@ $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
 const hasPending=u.pendingStampRequest&&u.pendingStampRequest.status==="pending";
 if(hasPending){
   renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:true,
-    onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()},
+    onDayClick:d=>{const k=ymd(d);const target=u.pendingStampRequest.stamps||(u.pendingStampRequest.stamps={});const cur=target[k];if(!cur)target[k]=true;else if(cur===true)target[k]="emergency";else delete target[k];saveData(data);renderAdminEdit()},
     pendingChanges:u.pendingStampRequest.stamps,originalStamps:u.stamps});
 } else {
   renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.stamps,clickable:true,onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()}});
