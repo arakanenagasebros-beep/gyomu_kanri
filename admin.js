@@ -578,7 +578,8 @@ $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
 // Show pending stamp request info
 const hasPending=u.pendingStampRequest&&u.pendingStampRequest.status==="pending";
 if(hasPending){
-  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:false,onDayClick:null,
+  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.pendingStampRequest.stamps,clickable:true,
+    onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()},
     pendingChanges:u.pendingStampRequest.stamps,originalStamps:u.stamps});
 } else {
   renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.stamps,clickable:true,onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()}});
@@ -1012,7 +1013,7 @@ function applyTaskTypeLogic(){
 }
 function openTaskAdd(){editingTaskId=null;$("taskAddTitle").textContent="📑 新規業務追加";
 const now=new Date();const week=addDays(now,7);
-$("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value=ymd(week);$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
+$("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value="";$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
 popSel($("taTaskType"),getTaskTypes());popSel($("taEmployee"),getEmployees());
 populateStaffSelect($("taStaff"),"未指定");
 applyTaskTypeLogic();
