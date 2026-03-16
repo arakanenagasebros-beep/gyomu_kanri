@@ -551,20 +551,33 @@ function buildYearMonthOpts(ySel,mSel,dr,def){const now=new Date();const minY=dr
 function filterReports(reps,y,m,wt){reps=reps||[];return reps.filter(r=>{if(!r.date)return false;const d=new Date(r.date+"T00:00:00");if(y!=="全て"&&d.getFullYear()!==parseInt(y))return false;if(m!=="全て"&&(d.getMonth()+1)!==parseInt(m))return false;if(wt!=="全て"&&r.workType!==wt)return false;return true})}
 
 /* === WORKLOAD DISPLAY === */
-function renderWorkload(container, filterStaffName) {
-  if (!container) return;
-  container.innerHTML = "";
-  const staffNames = filterStaffName ? [filterStaffName] : getStaffNames();
-  const grid = document.createElement("div");
-  grid.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;";
-  staffNames.forEach(name => {
-    const status = autoWorkloadStatus(name);
-    const colorMap = { "空いている": "var(--mint)", "業務が欲しい": "var(--blue)", "まだ余裕あり": "var(--orange)", "厳しい": "var(--red)" };
-    const color = colorMap[status] || "var(--muted)";
-    const chip = document.createElement("div");
-    chip.style.cssText = `display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;border:1.5px solid ${color}33;background:${color}11;`;
-    chip.innerHTML = `<span>${escapeHtml(name)}</span><span style="color:${color};">${status}</span>`;
-    grid.appendChild(chip);
+function renderWorkload(container,staffFilter){
+  if(!container)return;
+  container.innerHTML="";
+  const staffNames=staffFilter?[staffFilter]:getStaffNames();
+  const grid=document.createElement("div");grid.className="workload-grid";
+  function applyWlColor(sel){sel.classList.remove("wl-want","wl-ok","wl-busy");
+    if(sel.value==="業務が欲しい")sel.classList.add("wl-want");
+    else if(sel.value==="まだ余裕あり")sel.classList.add("wl-ok");
+    else if(sel.value==="厳しい")sel.classList.add("wl-busy")}
+  staffNames.forEach(name=>{
+    const active=data.tasks.filter(t=>t.staff===name&&(t.status==="依頼中"||t.status==="期限超過"));
+    const irai=active.filter(t=>t.status==="依頼中").length;
+    const kigen=active.filter(t=>t.status==="期限超過").length;
+    const autoSt=autoWorkloadStatus(name);
+    const card=document.createElement("div");card.className="workload-card";
+    card.innerHTML=`<div class="wl-name">${escapeHtml(name)}</div><div class="wl-counts">依頼中: <span style="color:var(--blue)">${irai}</span>　期限超過: <span style="color:var(--red)">${kigen}</span></div>`;
+    const sel=document.createElement("select");
+    const tp=getUserTypeByStaffName(name);
+    const opts=(tp==="社会人")?["空いている","まだ余裕あり","厳しい"]:["業務が欲しい","まだ余裕あり","厳しい"];
+    opts.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
+    sel.value=autoSt;applyWlColor(sel);
+    if(tp==="社会人"){
+      sel.disabled=true;
+    } else {
+      sel.addEventListener("change",()=>{data.staffWorkStatus[name]=sel.value;saveData(data);applyWlColor(sel)});
+    }
+    card.appendChild(sel);grid.appendChild(card);
   });
   container.appendChild(grid);
 }
