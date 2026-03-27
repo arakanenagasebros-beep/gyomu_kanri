@@ -38,7 +38,11 @@ try{
   data.users[result.user.id]=Object.assign({},data.users[result.user.id]||{},{name:result.user.name,userType:result.user.userType});
   saveData(data);
   userMonthCursor=startOfMonth(new Date());
-  await syncPull();
+  syncPull().then(changed=>{
+    if(!changed || data.session.userId!==result.user.id) return;
+    if(location.hash==="#user-stamp") renderStampScreen();
+    else if(location.hash==="#report-confirm") renderReportConfirm();
+  });
   if(result.user.userType==="社会人"){location.hash="#report-confirm";}else{
     const today=ymd(new Date());
     const visited=data.users[result.user.id].stampScreenVisitedToday===today;
@@ -618,29 +622,18 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       cells[key] = { cell, stampEl: st };
     }
     mount.appendChild(frag);
-    mount._calendarState = { monthKey, cells, clickable: !!clickable };
+    mount._calendarState = { monthKey, cells };
     return;
   }
 
-  const clickableChanged = state.clickable !== !!clickable;
   Object.keys(state.cells).forEach(key => {
     const ref = state.cells[key];
     const s = getStampState(key);
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
     ref.cell.classList.toggle("clickable", !!clickable);
-    if (clickableChanged || !!clickable) {
-      const newCell = ref.cell.cloneNode(true);
-      ref.cell.parentNode.replaceChild(newCell, ref.cell);
-      ref.cell = newCell;
-      ref.stampEl = newCell.querySelector(".stamp");
-      if (clickable && onDayClick) {
-        const d = new Date(key + "T00:00:00");
-        newCell.addEventListener("click", () => onDayClick(d));
-      }
-    }
+    if (!clickable) ref.cell.onclick = null;
   });
-  mount._calendarState.clickable = !!clickable;
 }
 
 
