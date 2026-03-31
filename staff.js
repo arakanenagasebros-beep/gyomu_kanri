@@ -1553,11 +1553,123 @@ function installStaffDirectBindings() {
   });
 }
 
+function getStaffOpenTaskStats(userId) {
+  const tasks = (data.tasks || []).filter(task => getTaskStaffUserId(task) === String(userId || ""));
+  const open = tasks.filter(task => task.status !== "螳御ｺ・" && task.status !== "繧ｭ繝｣繝ｳ繧ｻ繝ｫ");
+  const overdue = open.filter(task => task.status === "譛滄剞雜・℃");
+  return { total: tasks.length, open: open.length, overdue: overdue.length };
+}
+
+function getCurrentMonthReportCount(user) {
+  if (!user || !Array.isArray(user.reports)) return 0;
+  const today = new Date();
+  const y = String(today.getFullYear());
+  const m = String(today.getMonth() + 1);
+  return filterReports(user.reports, y, m, "蜈ｨ縺ｦ").length;
+}
+
+function upsertDashboardMount(parent, id, beforeNode) {
+  if (!parent) return null;
+  let mount = document.getElementById(id);
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.id = id;
+    if (beforeNode && beforeNode.parentNode === parent) parent.insertBefore(mount, beforeNode);
+    else parent.appendChild(mount);
+  }
+  mount.className = "dash-shell";
+  return mount;
+}
+
+function renderStaffNavigationDashboard(targetId, user, options) {
+  const mount = document.getElementById(targetId);
+  if (!mount || !user) return;
+  const taskStats = getStaffOpenTaskStats(user.id);
+  const reportCount = getCurrentMonthReportCount(user);
+  const stampedToday = !!(user.stamps && user.stamps[ymd(new Date())]);
+  const requestState = user.pendingStampRequest ? user.pendingStampRequest.status : "";
+  const requestText = requestState === "pending" ? "申請確認待ち" : requestState === "approved" ? "承認済み" : requestState === "rejected" ? "差し戻し" : "申請なし";
+  const alert = taskStats.overdue > 0 ? `${taskStats.overdue}件の期限超過タスクがあります` : "";
+
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">${options.title}</div>
+        <div class="dash-sub">${options.subtitle}</div>
+      </div>
+      <div class="dash-chip">${stampedToday ? "今日のスタンプ済み" : "今日のスタンプ未完了"}</div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-label">今月の日報</div>
+        <div class="dash-value">${reportCount}</div>
+        <div class="dash-note">今月入力した日報件数</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">対応中タスク</div>
+        <div class="dash-value">${taskStats.open}</div>
+        <div class="dash-note">期限超過 ${taskStats.overdue} 件</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">スタンプ修正申請</div>
+        <div class="dash-value small">${requestText}</div>
+        <div class="dash-note">申請状況をここで確認</div>
+      </div>
+    </div>
+    ${alert ? `<div class="dash-alert">${alert}</div>` : ""}
+    <div class="dash-actions">
+      <button type="button" class="dash-action primary" data-staff-nav="report-input">日報を入力 <span>></span></button>
+      <button type="button" class="dash-action" data-staff-nav="report-list">日報一覧 <span>></span></button>
+      <button type="button" class="dash-action" data-staff-nav="task-list">タスク一覧 <span>></span></button>
+    </div>
+  `;
+
+  mount.querySelectorAll("[data-staff-nav]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-staff-nav");
+      if (action === "report-input") {
+        editingReportIdx = -1;
+        rpTransportLocked = false;
+        location.hash = "#report-input";
+      } else if (action === "report-list") {
+        location.hash = "#report-confirm";
+      } else if (action === "task-list") {
+        location.hash = "#staff-task-list";
+      }
+    });
+  });
+}
+
+const _renderStampScreenDirectBase = renderStampScreen;
+renderStampScreen = function() {
+  _renderStampScreenDirectBase();
+  const u = data.users[data.session.userId];
+  const screen = document.querySelector("#userStamp .stamp-screen");
+  const actions = document.querySelector("#userStamp .stamp-actions");
+  if (!u || !screen) return;
+  const mount = upsertDashboardMount(screen, "staffStampDashboard", actions ? actions.nextSibling : null);
+  if (!mount) return;
+  renderStaffNavigationDashboard("staffStampDashboard", u, {
+    title: "Next Actions",
+    subtitle: "スタンプ後にそのまま次の作業へ進めます"
+  });
+};
+
 const _renderUserHomeDirectBase = renderUserHome;
 renderUserHome = function() {
   _renderUserHomeDirectBase();
   const u = data.users[data.session.userId];
   if (!u) return;
+
+  const section = document.getElementById("userHome");
+  const grid = section ? section.querySelector(".grid") : null;
+  const mount = upsertDashboardMount(section, "staffHomeDashboard", grid);
+  if (mount) {
+    renderStaffNavigationDashboard("staffHomeDashboard", u, {
+      title: "Dashboard",
+      subtitle: "今日やることと進行状況をまとめて確認できます"
+    });
+  }
 
   const stampRequestArea = $("stampRequestArea");
   if (stampRequestArea && u.pendingStampRequest && (u.pendingStampRequest.status === "approved" || u.pendingStampRequest.status === "rejected")) {

@@ -258,6 +258,23 @@ td.editing textarea{min-height:40px;resize:vertical;}
 .dd-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:12px;border:1px solid var(--line);margin-bottom:4px;background:rgba(255,255,255,.8);gap:8px;}
 .dd-item span{font-size:12px;}
 .dd-item .dd-info{flex:1;min-width:0;}
+.dash-shell{margin:14px 0;padding:14px;border-radius:22px;border:2px solid rgba(77,150,255,.12);background:linear-gradient(135deg,rgba(255,255,255,.94),rgba(245,250,255,.94));box-shadow:0 10px 30px rgba(77,150,255,.08);}
+.dash-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.dash-title{font-size:16px;font-weight:900;font-family:var(--font-display);}
+.dash-sub{font-size:11px;color:var(--muted);line-height:1.6;}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+.dash-card{padding:12px 14px;border-radius:18px;border:1px solid rgba(45,27,78,.08);background:rgba(255,255,255,.88);}
+.dash-label{font-size:11px;font-weight:700;color:var(--muted);}
+.dash-value{margin-top:6px;font-size:24px;font-weight:900;font-family:var(--font-display);}
+.dash-value.small{font-size:16px;line-height:1.4;}
+.dash-note{margin-top:6px;font-size:11px;color:var(--muted);}
+.dash-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.dash-action{flex:1 1 150px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-radius:16px;border:1px solid rgba(45,27,78,.08);background:rgba(255,255,255,.92);cursor:pointer;font-weight:800;font-family:var(--font-body);color:var(--text);box-shadow:0 4px 14px rgba(45,27,78,.06);}
+.dash-action.primary{background:var(--grad1);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(255,107,157,.22);}
+.dash-action.admin{background:var(--grad2);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(77,150,255,.20);}
+.dash-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(77,150,255,.08);border:1px solid rgba(77,150,255,.12);font-size:11px;font-weight:800;color:var(--blue);}
+.dash-alert{margin-top:10px;padding:10px 12px;border-radius:16px;background:rgba(255,71,87,.06);border:1px solid rgba(255,71,87,.12);font-size:12px;font-weight:700;color:#b42318;}
+@media(max-width:640px){.dash-actions{flex-direction:column;}.dash-action{width:100%;}}
 .dd-item .dd-price{font-size:11px;color:var(--orange);font-weight:700;white-space:nowrap;}
 .dd-item .dd-btns{display:flex;gap:4px;flex-shrink:0;}
 .file-list{display:flex;flex-direction:column;gap:4px;margin-top:8px;}

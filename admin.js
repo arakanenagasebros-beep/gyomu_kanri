@@ -1895,6 +1895,109 @@ renderAdminEdit = function() {
   }
 };
 
+function getAdminOverviewStats() {
+  const tasks = data.tasks || [];
+  const today = ymd(new Date());
+  return {
+    staffCount: Object.values(data.users || {}).filter(u => u && (u.userType || "") !== "遉ｾ莨壻ｺｺ").length,
+    pendingStamp: countPendingStampRequests(),
+    overdueTasks: tasks.filter(task => task.status === "譛滄剞雜・℃").length,
+    workingTasks: tasks.filter(task => task.status === "萓晞ｼ蜑・" || task.status === "萓晞ｼ荳ｭ").length,
+    completedToday: tasks.filter(task => task.status === "螳御ｺ・" && task.completionDate === today).length
+  };
+}
+
+function renderAdminOverviewDashboard() {
+  const section = document.getElementById("adminHome");
+  if (!section) return;
+  const firstCard = section.querySelector(".card");
+  let mount = document.getElementById("adminOverviewDashboard");
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.id = "adminOverviewDashboard";
+    if (firstCard && firstCard.parentNode === section) section.insertBefore(mount, firstCard.nextSibling);
+    else section.appendChild(mount);
+  }
+  mount.className = "dash-shell";
+
+  const stats = getAdminOverviewStats();
+  const alert = stats.pendingStamp > 0 || stats.overdueTasks > 0
+    ? `要確認: スタンプ申請 ${stats.pendingStamp} 件 / 期限超過タスク ${stats.overdueTasks} 件`
+    : "";
+
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">Admin Dashboard</div>
+        <div class="dash-sub">最初に確認したい状況をまとめています</div>
+      </div>
+      <div class="dash-chip">今日の完了 ${stats.completedToday} 件</div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-label">スタッフ数</div>
+        <div class="dash-value">${stats.staffCount}</div>
+        <div class="dash-note">学生スタッフを集計</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">スタンプ申請</div>
+        <div class="dash-value">${stats.pendingStamp}</div>
+        <div class="dash-note">確認待ち件数</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">期限超過タスク</div>
+        <div class="dash-value">${stats.overdueTasks}</div>
+        <div class="dash-note">優先対応が必要</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">進行中タスク</div>
+        <div class="dash-value">${stats.workingTasks}</div>
+        <div class="dash-note">依頼中 / 作業中</div>
+      </div>
+    </div>
+    ${alert ? `<div class="dash-alert">${alert}</div>` : ""}
+    <div class="dash-actions">
+      <button type="button" class="dash-action admin" data-admin-nav="pending-stamp">申請を確認 <span>></span></button>
+      <button type="button" class="dash-action" data-admin-nav="overdue-task">期限超過を見る <span>></span></button>
+      <button type="button" class="dash-action" data-admin-nav="report-mgmt">日報管理 <span>></span></button>
+      <button type="button" class="dash-action" data-admin-nav="month-check">月次チェック <span>></span></button>
+    </div>
+  `;
+
+  mount.querySelectorAll("[data-admin-nav]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-admin-nav");
+      if (action === "pending-stamp") {
+        const reqUser = Object.values(data.users || {}).find(user => user && user.pendingStampRequest && user.pendingStampRequest.status === "pending");
+        if (reqUser) {
+          data.session.adminEditingUserId = reqUser.id;
+          saveLocalOnly(data);
+          editMonthCursor = startOfMonth(new Date());
+          location.hash = "#admin-edit";
+        } else {
+          location.hash = "#admin";
+        }
+      } else if (action === "overdue-task") {
+        location.hash = "#admin-task-list";
+        setTimeout(() => {
+          if ($("atlStatus")) $("atlStatus").value = "譛滄剞雜・℃";
+          if (typeof doRenderATL === "function") doRenderATL();
+        }, 120);
+      } else if (action === "report-mgmt") {
+        location.hash = "#admin-report-mgmt";
+      } else if (action === "month-check") {
+        location.hash = "#admin-month-check";
+      }
+    });
+  });
+}
+
+const _renderAdminHomeDashboardBase = renderAdminHome;
+renderAdminHome = function() {
+  _renderAdminHomeDashboardBase();
+  renderAdminOverviewDashboard();
+};
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", installAdminDirectBindings, { once: true });
 } else {
