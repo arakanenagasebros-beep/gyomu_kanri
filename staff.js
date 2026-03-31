@@ -23,7 +23,7 @@ window.addEventListener("hashchange",route);
 // Nav helpers (staff only - admin refs safely ignored via _noop)
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
 function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
-$("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventListener("click",doLogout);$("confirmLogout").addEventListener("click",doLogout);$("stlLogout").addEventListener("click",doLogout);
+$("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventListener("click",doLogout);$("reportLogout").addEventListener("click",doLogout);$("confirmLogout").addEventListener("click",doLogout);$("stlLogout").addEventListener("click",doLogout);
 
 // Login
 $("btnUserLogin").addEventListener("click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
@@ -353,7 +353,7 @@ try{
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
   data.users=data.users||{};
   const existing = data.users[id] || {};
-  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
+  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype, pw:pw});
   saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
   renderAdminReportMgmt();showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
 }catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}

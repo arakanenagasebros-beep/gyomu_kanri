@@ -14,7 +14,7 @@ if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="no
 if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminReportMgmt");renderAdminReportMgmt();return}
 if(h==="#admin-report-detail"){if(!data.session.adminAuthed||!data.session.adminReportEditingUserId){location.hash="#admin-report-mgmt";return}showOnly("adminReportDetail");renderAdminReportDetail();return}
 if(h==="#admin-task-list"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminTaskList");renderAdminTaskList();return}
-if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminDropdownEdit");renderDropdownEdit();return}
+if(h==="#admin-dropdown-edit"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminDropdownEdit");renderDropdownEdit();syncPull().then(changed=>{if(changed && location.hash==="#admin-dropdown-edit" && data.session.adminAuthed) renderDropdownEdit()});return}
 if(h==="#admin-month-check"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminMonthCheck");renderMonthCheck();return}
 if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";return}showOnly("adminHome");renderAdminHome();syncPull().then(changed=>{if(changed && location.hash==="#admin" && data.session.adminAuthed) renderAdminHome()});return}
 if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();syncPull().then(changed=>{if(changed && location.hash==="#admin-edit" && data.session.adminAuthed && data.session.adminEditingUserId) renderAdminEdit()});return}
@@ -367,10 +367,10 @@ try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
   const r=await resp.json();
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
-// ローカルデータにはPWを保存しない（全ての空箱を初期化して作る）
+// ローカルデータにも PW を保持して、編集オーバーレイから確認できるようにする
   data.users=data.users||{};
   const existing = data.users[id] || {};
-  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
+  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype, pw:pw});
   saveData(data);
   $("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
   showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
@@ -1233,8 +1233,11 @@ dBtn.addEventListener("click", async ()=>{
 }
 /* === STAFF EDIT OVERLAY === */
 let _staffEditId = null;
-function openStaffEdit(userId) {
+async function openStaffEdit(userId) {
   _staffEditId = userId;
+  try {
+    await syncPull();
+  } catch (_error) {}
   const u = data.users[userId]; if (!u) return;
   $("seId").value = u.id;
   $("sePw").value = u.pw || "";
@@ -2008,12 +2011,12 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
   const section = document.getElementById(sectionId);
   if (!section) return;
   hideAdminDuplicateNav(sectionId);
-  const firstCard = section.querySelector(".card");
+  const topbar = section.querySelector(".topbar");
   let mount = document.getElementById(mountId);
   if (!mount) {
     mount = document.createElement("div");
     mount.id = mountId;
-    if (firstCard && firstCard.parentNode === section) section.insertBefore(mount, firstCard);
+    if (topbar && topbar.parentNode === section) section.insertBefore(mount, topbar.nextSibling);
     else section.appendChild(mount);
   }
   mount.className = "dash-shell";
