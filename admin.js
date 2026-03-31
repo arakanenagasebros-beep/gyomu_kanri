@@ -1998,6 +1998,97 @@ renderAdminHome = function() {
   renderAdminOverviewDashboard();
 };
 
+function hideAdminDuplicateNav(sectionId) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  section.querySelectorAll(".admin-tabs").forEach(el => { el.style.display = "none"; });
+}
+
+function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  hideAdminDuplicateNav(sectionId);
+  const firstCard = section.querySelector(".card");
+  let mount = document.getElementById(mountId);
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.id = mountId;
+    if (firstCard && firstCard.parentNode === section) section.insertBefore(mount, firstCard);
+    else section.appendChild(mount);
+  }
+  mount.className = "dash-shell";
+  const items = [
+    { key: "home", label: "ホーム" },
+    { key: "report", label: "日報管理" },
+    { key: "task", label: "タスク" },
+    { key: "master", label: "設定" },
+    { key: "month", label: "月次確認" }
+  ];
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">管理ナビ</div>
+        <div class="dash-sub">どの画面からでも主要メニューへ移動できます</div>
+      </div>
+    </div>
+    <div class="dash-actions">
+      ${items.map(item => `<button type="button" class="dash-action${item.key === currentKey ? " admin" : ""}" data-admin-global="${item.key}">${item.label}<span>${item.key === currentKey ? "●" : ">"}</span></button>`).join("")}
+    </div>
+  `;
+  mount.querySelectorAll("[data-admin-global]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-admin-global");
+      if (action === "home") location.hash = "#admin";
+      else if (action === "report") location.hash = "#admin-report-mgmt";
+      else if (action === "task") location.hash = "#admin-task-list";
+      else if (action === "master") location.hash = "#admin-dropdown-edit";
+      else if (action === "month") location.hash = "#admin-month-check";
+    });
+  });
+}
+
+const _renderAdminHomeGlobalBase = renderAdminHome;
+renderAdminHome = function() {
+  _renderAdminHomeGlobalBase();
+  hideAdminDuplicateNav("adminHome");
+};
+
+const _renderAdminReportMgmtGlobalBase = renderAdminReportMgmt;
+renderAdminReportMgmt = function() {
+  _renderAdminReportMgmtGlobalBase();
+  renderAdminGlobalDashboard("adminReportMgmt", "adminReportMgmtNav", "report");
+};
+
+const _renderAdminTaskListGlobalBase = renderAdminTaskList;
+renderAdminTaskList = function() {
+  _renderAdminTaskListGlobalBase();
+  renderAdminGlobalDashboard("adminTaskList", "adminTaskListNav", "task");
+};
+
+const _renderDropdownEditGlobalBase = renderDropdownEdit;
+renderDropdownEdit = function() {
+  _renderDropdownEditGlobalBase();
+  renderAdminGlobalDashboard("adminDropdownEdit", "adminDropdownEditNav", "master");
+};
+
+const _renderMonthCheckGlobalBase = renderMonthCheck;
+renderMonthCheck = function() {
+  _renderMonthCheckGlobalBase();
+  renderAdminGlobalDashboard("adminMonthCheck", "adminMonthCheckNav", "month");
+};
+
+const _renderAdminReportDetailGlobalBase = renderAdminReportDetail;
+renderAdminReportDetail = function() {
+  _renderAdminReportDetailGlobalBase();
+  renderAdminGlobalDashboard("adminReportDetail", "adminReportDetailNav", "report");
+};
+
+const _renderAdminEditGlobalBase = renderAdminEdit;
+renderAdminEdit = function() {
+  _renderAdminEditGlobalBase();
+  renderAdminGlobalDashboard("adminEdit", "adminEditNav", "home");
+};
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", installAdminDirectBindings, { once: true });
 } else {

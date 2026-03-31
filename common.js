@@ -789,77 +789,220 @@ function applyDirectUserSync(userId, nextUser, result) {
   saveLocalAsSynced(data, syncMetaFromResult(result));
 }
 
+function isUnsupportedDirectActionError(error) {
+  const message = String(error && error.message || "").toLowerCase();
+  return message.indexOf("unknown action") >= 0;
+}
+
+function saveLegacyDirectUser(targetUserId, mutator) {
+  const user = ensureLocalUser(targetUserId);
+  mutator(user);
+  saveData(data);
+  return cloneDeep(user);
+}
+
 async function setStampRemote(targetUserId, date, value, metaPatch) {
-  const result = await postDirectAction("setStamp", { targetUserId, date, value, metaPatch: metaPatch || null });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("setStamp", { targetUserId, date, value, metaPatch: metaPatch || null });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      if (value == null || value === "") delete u.stamps[date];
+      else u.stamps[date] = value;
+      if (metaPatch) {
+        Object.keys(metaPatch).forEach(key => {
+          const nextValue = metaPatch[key];
+          if (nextValue == null || nextValue === "") delete u[key];
+          else u[key] = nextValue;
+        });
+      }
+    });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function setStampMetaRemote(targetUserId, metaPatch) {
-  const result = await postDirectAction("setStampMeta", { targetUserId, metaPatch: metaPatch || {} });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("setStampMeta", { targetUserId, metaPatch: metaPatch || {} });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      Object.keys(metaPatch || {}).forEach(key => {
+        const nextValue = metaPatch[key];
+        if (nextValue == null || nextValue === "") delete u[key];
+        else u[key] = nextValue;
+      });
+    });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function requestStampCorrectionRemote(targetUserId, stamps) {
-  const result = await postDirectAction("requestStampCorrection", { targetUserId, stamps: cloneDeep(stamps || {}) });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("requestStampCorrection", { targetUserId, stamps: cloneDeep(stamps || {}) });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      u.pendingStampRequest = { stamps: cloneDeep(stamps || {}), status: "pending", createdAt: Date.now() };
+    });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function updateStampRequestDraftRemote(targetUserId, stamps) {
-  const result = await postDirectAction("updateStampRequestDraft", { targetUserId, stamps: cloneDeep(stamps || {}) });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("updateStampRequestDraft", { targetUserId, stamps: cloneDeep(stamps || {}) });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      u.pendingStampRequest = u.pendingStampRequest || {};
+      u.pendingStampRequest.stamps = cloneDeep(stamps || {});
+      if (!u.pendingStampRequest.status) u.pendingStampRequest.status = "pending";
+    });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function resolveStampCorrectionRemote(targetUserId, decision) {
-  const result = await postDirectAction("resolveStampCorrection", { targetUserId, decision });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("resolveStampCorrection", { targetUserId, decision });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      if (decision === "approved" && u.pendingStampRequest && u.pendingStampRequest.stamps) {
+        u.stamps = cloneDeep(u.pendingStampRequest.stamps);
+        u.pendingStampRequest = { status: "approved", resolvedAt: Date.now() };
+      } else if (decision === "rejected") {
+        u.pendingStampRequest = { status: "rejected", resolvedAt: Date.now() };
+      }
+    });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function clearStampRequestStateRemote(targetUserId) {
-  const result = await postDirectAction("clearStampRequestState", { targetUserId });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result;
+  try {
+    const result = await postDirectAction("clearStampRequestState", { targetUserId });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const user = saveLegacyDirectUser(targetUserId, u => { u.pendingStampRequest = null; });
+    return { ok: true, user, legacyFallback: true };
+  }
 }
 
 async function addReportRemote(targetUserId, report) {
-  const result = await postDirectAction("addReport", { targetUserId, report: cloneDeep(report || {}) });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result.report || null;
+  try {
+    const result = await postDirectAction("addReport", { targetUserId, report: cloneDeep(report || {}) });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result.report || null;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const nextReport = cloneDeep(report || {});
+    ensureLocalReportId(nextReport);
+    const user = saveLegacyDirectUser(targetUserId, u => {
+      u.reports = Array.isArray(u.reports) ? u.reports : [];
+      u.reports.push(nextReport);
+    });
+    return cloneDeep((user.reports || []).find(r => r.reportId === nextReport.reportId) || nextReport);
+  }
 }
 
 async function updateReportRemote(targetUserId, reportId, reportIndex, patch) {
-  const result = await postDirectAction("updateReport", {
-    targetUserId,
-    reportId: reportId || "",
-    reportIndex,
-    patch: cloneDeep(patch || {})
-  });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result.report || null;
+  try {
+    const result = await postDirectAction("updateReport", {
+      targetUserId,
+      reportId: reportId || "",
+      reportIndex,
+      patch: cloneDeep(patch || {})
+    });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result.report || null;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    let updated = null;
+    saveLegacyDirectUser(targetUserId, u => {
+      u.reports = Array.isArray(u.reports) ? u.reports : [];
+      const idx = findLocalReportIndex(u, reportId, reportIndex);
+      if (idx < 0) return;
+      const nextReport = Object.assign({}, u.reports[idx] || {}, cloneDeep(patch || {}));
+      ensureLocalReportId(nextReport);
+      u.reports[idx] = nextReport;
+      updated = cloneDeep(nextReport);
+    });
+    return updated;
+  }
 }
 
 async function deleteReportRemote(targetUserId, reportId, reportIndex) {
-  const result = await postDirectAction("deleteReport", {
-    targetUserId,
-    reportId: reportId || "",
-    reportIndex
-  });
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return true;
+  try {
+    const result = await postDirectAction("deleteReport", {
+      targetUserId,
+      reportId: reportId || "",
+      reportIndex
+    });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return true;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    saveLegacyDirectUser(targetUserId, u => {
+      u.reports = Array.isArray(u.reports) ? u.reports : [];
+      const idx = findLocalReportIndex(u, reportId, reportIndex);
+      if (idx >= 0) u.reports.splice(idx, 1);
+    });
+    return true;
+  }
 }
 
 async function setReportReviewRemote(targetUserId, reportId, reportIndex, reviewPatch) {
-  const result = await postDirectAction("setReportReview", Object.assign({
-    targetUserId,
-    reportId: reportId || "",
-    reportIndex
-  }, cloneDeep(reviewPatch || {})));
-  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
-  return result.report || null;
+  try {
+    const result = await postDirectAction("setReportReview", Object.assign({
+      targetUserId,
+      reportId: reportId || "",
+      reportIndex
+    }, cloneDeep(reviewPatch || {})));
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result.report || null;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    let updated = null;
+    saveLegacyDirectUser(targetUserId, u => {
+      u.reports = Array.isArray(u.reports) ? u.reports : [];
+      const idx = findLocalReportIndex(u, reportId, reportIndex);
+      if (idx < 0) return;
+      const nextReport = Object.assign({}, u.reports[idx] || {}, cloneDeep(reviewPatch || {}));
+      ensureLocalReportId(nextReport);
+      u.reports[idx] = nextReport;
+      updated = cloneDeep(nextReport);
+    });
+    return updated;
+  }
+}
+
+async function changeOwnStaffPasswordRemote(currentPw, newPw) {
+  try {
+    const result = await postDirectAction("changeOwnStaffPassword", { currentPw, newPw });
+    if (result.user && data.session && data.session.userId) {
+      applyDirectUserSync(data.session.userId, result.user, result);
+    }
+    return result;
+  } catch (error) {
+    if (isUnsupportedDirectActionError(error)) {
+      throw new Error("password_change_requires_gas_update");
+    }
+    throw error;
+  }
 }
 
 function buildReportPayloadFromForm(transportValueOverride) {

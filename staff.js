@@ -1588,8 +1588,16 @@ function renderStaffNavigationDashboard(targetId, user, options) {
   const reportCount = getCurrentMonthReportCount(user);
   const stampedToday = !!(user.stamps && user.stamps[ymd(new Date())]);
   const requestState = user.pendingStampRequest ? user.pendingStampRequest.status : "";
-  const requestText = requestState === "pending" ? "申請確認待ち" : requestState === "approved" ? "承認済み" : requestState === "rejected" ? "差し戻し" : "申請なし";
+  const requestText = requestState === "pending" ? "確認待ち" : requestState === "approved" ? "承認済み" : requestState === "rejected" ? "差し戻し" : "申請なし";
   const alert = taskStats.overdue > 0 ? `${taskStats.overdue}件の期限超過タスクがあります` : "";
+  const current = options.current || "";
+  const actions = [
+    { key: "stamp", label: "スタンプ", hidden: user.userType === "遉ｾ莨壻ｺｺ" },
+    { key: "report-input", label: "日報入力" },
+    { key: "report-list", label: "日報一覧" },
+    { key: "task-list", label: "タスク一覧" },
+    { key: "password", label: "PW変更" }
+  ].filter(action => !action.hidden);
 
   mount.innerHTML = `
     <div class="dash-head">
@@ -1618,16 +1626,16 @@ function renderStaffNavigationDashboard(targetId, user, options) {
     </div>
     ${alert ? `<div class="dash-alert">${alert}</div>` : ""}
     <div class="dash-actions">
-      <button type="button" class="dash-action primary" data-staff-nav="report-input">日報を入力 <span>></span></button>
-      <button type="button" class="dash-action" data-staff-nav="report-list">日報一覧 <span>></span></button>
-      <button type="button" class="dash-action" data-staff-nav="task-list">タスク一覧 <span>></span></button>
+      ${actions.map(action => `<button type="button" class="dash-action${action.key === current ? " primary" : ""}" data-staff-nav="${action.key}">${action.label}<span>${action.key === current ? "●" : ">"}</span></button>`).join("")}
     </div>
   `;
 
   mount.querySelectorAll("[data-staff-nav]").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.getAttribute("data-staff-nav");
-      if (action === "report-input") {
+      if (action === "stamp") {
+        location.hash = "#user-stamp";
+      } else if (action === "report-input") {
         editingReportIdx = -1;
         rpTransportLocked = false;
         location.hash = "#report-input";
@@ -1635,24 +1643,74 @@ function renderStaffNavigationDashboard(targetId, user, options) {
         location.hash = "#report-confirm";
       } else if (action === "task-list") {
         location.hash = "#staff-task-list";
+      } else if (action === "password") {
+        openStaffPasswordChangeFlow();
       }
     });
   });
 }
 
+async function openStaffPasswordChangeFlow() {
+  const currentPw = prompt("現在のパスワードを入力してください");
+  if (currentPw === null) return;
+  const newPw = prompt("新しいパスワードを入力してください");
+  if (newPw === null) return;
+  if (!String(newPw).trim()) {
+    showModal({ title: "入力エラー", sub: "新しいパスワードを入力してください", big: "!" });
+    return;
+  }
+  const confirmPw = prompt("確認のため、もう一度新しいパスワードを入力してください");
+  if (confirmPw === null) return;
+  if (newPw !== confirmPw) {
+    showModal({ title: "入力エラー", sub: "新しいパスワードが一致しません", big: "!" });
+    return;
+  }
+
+  try {
+    await changeOwnStaffPasswordRemote(currentPw, newPw);
+    showModal({ title: "変更しました", sub: "次回ログインから新しいパスワードが使えます", big: "OK" });
+  } catch (error) {
+    if (String(error && error.message || "") === "password_change_requires_gas_update") {
+      showModal({ title: "未反映です", sub: "GAS 側の更新がまだ反映されていません", big: "!" });
+      return;
+    }
+    handleDirectActionError(error, "パスワード変更に失敗しました");
+  }
+}
+
+function hideStaffDuplicateButtons(sectionId) {
+  const hideIdsBySection = {
+    userStamp: ["goToCalendarFromStamp", "stampGoReport", "stampGoReportList", "stampGoTaskList"],
+    userHome: ["goToStamp", "btnGoReport", "btnGoReportList", "btnGoTaskListFromCal"],
+    reportInput: ["reportBackToCal"],
+    reportConfirm: ["confirmBackToCal", "confirmGoTask", "btnNewReport"],
+    staffTaskList: ["stlBack", "stlBackToReport"]
+  };
+  (hideIdsBySection[sectionId] || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+  if (sectionId === "userStamp") {
+    const actions = document.querySelector("#userStamp .stamp-actions");
+    if (actions) actions.style.display = "none";
+  }
+}
+
+function renderStaffSectionDashboard(sectionId, mountId, title, subtitle, currentKey) {
+  const section = document.getElementById(sectionId);
+  const user = data.users[data.session.userId];
+  if (!section || !user) return;
+  hideStaffDuplicateButtons(sectionId);
+  const firstCard = section.querySelector(".card");
+  const mount = upsertDashboardMount(section, mountId, firstCard || null);
+  if (!mount) return;
+  renderStaffNavigationDashboard(mountId, user, { title, subtitle, current: currentKey });
+}
+
 const _renderStampScreenDirectBase = renderStampScreen;
 renderStampScreen = function() {
   _renderStampScreenDirectBase();
-  const u = data.users[data.session.userId];
-  const screen = document.querySelector("#userStamp .stamp-screen");
-  const actions = document.querySelector("#userStamp .stamp-actions");
-  if (!u || !screen) return;
-  const mount = upsertDashboardMount(screen, "staffStampDashboard", actions ? actions.nextSibling : null);
-  if (!mount) return;
-  renderStaffNavigationDashboard("staffStampDashboard", u, {
-    title: "Next Actions",
-    subtitle: "スタンプ後にそのまま次の作業へ進めます"
-  });
+  renderStaffSectionDashboard("userStamp", "staffStampDashboard", "クイックメニュー", "スタンプ後の次の操作をここから選べます", "stamp");
 };
 
 const _renderUserHomeDirectBase = renderUserHome;
@@ -1661,15 +1719,7 @@ renderUserHome = function() {
   const u = data.users[data.session.userId];
   if (!u) return;
 
-  const section = document.getElementById("userHome");
-  const grid = section ? section.querySelector(".grid") : null;
-  const mount = upsertDashboardMount(section, "staffHomeDashboard", grid);
-  if (mount) {
-    renderStaffNavigationDashboard("staffHomeDashboard", u, {
-      title: "Dashboard",
-      subtitle: "今日やることと進行状況をまとめて確認できます"
-    });
-  }
+  renderStaffSectionDashboard("userHome", "staffHomeDashboard", "ダッシュボード", "今日やることと進行状況をまとめて確認できます", "stamp");
 
   const stampRequestArea = $("stampRequestArea");
   if (stampRequestArea && u.pendingStampRequest && (u.pendingStampRequest.status === "approved" || u.pendingStampRequest.status === "rejected")) {
@@ -1734,6 +1784,24 @@ doRenderReportList = function() {
         .catch(error => handleDirectActionError(error, "日報削除に失敗しました"));
     });
   });
+};
+
+const _initReportFormDashboardBase = initReportForm;
+initReportForm = function() {
+  _initReportFormDashboardBase();
+  renderStaffSectionDashboard("reportInput", "staffReportInputDashboard", "クイックメニュー", "入力中でも他の画面へ迷わず移動できます", "report-input");
+};
+
+const _renderReportConfirmDashboardBase = renderReportConfirm;
+renderReportConfirm = function() {
+  _renderReportConfirmDashboardBase();
+  renderStaffSectionDashboard("reportConfirm", "staffReportConfirmDashboard", "クイックメニュー", "日報一覧から次の操作へ進めます", "report-list");
+};
+
+const _renderStaffTaskListDashboardBase = renderStaffTaskList;
+renderStaffTaskList = function() {
+  _renderStaffTaskListDashboardBase();
+  renderStaffSectionDashboard("staffTaskList", "staffTaskDashboard", "クイックメニュー", "担当タスク確認と次の操作をまとめています", "task-list");
 };
 
 if (document.readyState === "loading") {
