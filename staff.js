@@ -1701,16 +1701,79 @@ function renderStaffSectionDashboard(sectionId, mountId, title, subtitle, curren
   const user = data.users[data.session.userId];
   if (!section || !user) return;
   hideStaffDuplicateButtons(sectionId);
-  const firstCard = section.querySelector(".card");
-  const mount = upsertDashboardMount(section, mountId, firstCard || null);
+  const topbar = section.querySelector(".topbar");
+  const mount = upsertDashboardMount(section, mountId, topbar ? topbar.nextSibling : null);
   if (!mount) return;
   renderStaffNavigationDashboard(mountId, user, { title, subtitle, current: currentKey });
+}
+
+function renderTodayReportPreview() {
+  const section = document.getElementById("reportInput");
+  const user = data.users[data.session.userId];
+  if (!section || !user) return;
+  const formCard = section.querySelector(".card");
+  const mount = upsertDashboardMount(section, "todayReportPreview", formCard || null);
+  if (!mount) return;
+
+  const targetDate = $("rpDate") && $("rpDate").value ? $("rpDate").value : ymd(new Date());
+  const reports = (user.reports || [])
+    .map((report, index) => ({ report, index }))
+    .filter(entry => entry.report && entry.report.date === targetDate)
+    .sort((a, b) => {
+      const aKey = `${a.report.startH || "00"}:${a.report.startM || "00"}`;
+      const bKey = `${b.report.startH || "00"}:${b.report.startM || "00"}`;
+      return aKey.localeCompare(bKey);
+    });
+
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">同日の入力済み日報</div>
+        <div class="dash-sub">${targetDate} に入っている日報をこの場で確認できます</div>
+      </div>
+      <div class="dash-chip">${reports.length}件</div>
+    </div>
+    ${reports.length ? `
+      <div class="dash-grid">
+        ${reports.map(entry => {
+          const report = entry.report;
+          const workLabel = report.workType || "-";
+          const timeLabel = `${report.startH || "--"}:${report.startM || "--"} - ${report.endH || "--"}:${report.endM || "--"}`;
+          const extra = report.workType === "蝨ｨ螳・" ? `${report.taskType || ""} ${report.manHours || ""}`.trim() : `交通費 ${report.transport || 0}`;
+          return `
+            <div class="dash-card">
+              <div class="dash-label">${workLabel}</div>
+              <div class="dash-value small">${timeLabel}</div>
+              <div class="dash-note">${extra || "詳細なし"}</div>
+              <div class="dash-note">${escapeHtml((report.content || "").slice(0, 60) || "内容なし")}</div>
+              <div class="dash-actions" style="margin-top:8px;">
+                <button type="button" class="dash-action" data-today-report-edit="${entry.index}">この日報を編集 <span>></span></button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    ` : `
+      <div class="dash-card">
+        <div class="dash-value small">まだ入力されていません</div>
+        <div class="dash-note">このまま新規で入力できます</div>
+      </div>
+    `}
+  `;
+
+  mount.querySelectorAll("[data-today-report-edit]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      editingReportIdx = parseInt(btn.getAttribute("data-today-report-edit"), 10);
+      rpTransportLocked = false;
+      initReportForm();
+    });
+  });
 }
 
 const _renderStampScreenDirectBase = renderStampScreen;
 renderStampScreen = function() {
   _renderStampScreenDirectBase();
-  renderStaffSectionDashboard("userStamp", "staffStampDashboard", "クイックメニュー", "スタンプ後の次の操作をここから選べます", "stamp");
+  renderStaffSectionDashboard("userStamp", "staffStampDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "stamp");
 };
 
 const _renderUserHomeDirectBase = renderUserHome;
@@ -1719,7 +1782,7 @@ renderUserHome = function() {
   const u = data.users[data.session.userId];
   if (!u) return;
 
-  renderStaffSectionDashboard("userHome", "staffHomeDashboard", "ダッシュボード", "今日やることと進行状況をまとめて確認できます", "stamp");
+  renderStaffSectionDashboard("userHome", "staffHomeDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "stamp");
 
   const stampRequestArea = $("stampRequestArea");
   if (stampRequestArea && u.pendingStampRequest && (u.pendingStampRequest.status === "approved" || u.pendingStampRequest.status === "rejected")) {
@@ -1789,19 +1852,21 @@ doRenderReportList = function() {
 const _initReportFormDashboardBase = initReportForm;
 initReportForm = function() {
   _initReportFormDashboardBase();
-  renderStaffSectionDashboard("reportInput", "staffReportInputDashboard", "クイックメニュー", "入力中でも他の画面へ迷わず移動できます", "report-input");
+  renderStaffSectionDashboard("reportInput", "staffReportInputDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "report-input");
+  renderTodayReportPreview();
+  if ($("rpDate")) $("rpDate").onchange = () => renderTodayReportPreview();
 };
 
 const _renderReportConfirmDashboardBase = renderReportConfirm;
 renderReportConfirm = function() {
   _renderReportConfirmDashboardBase();
-  renderStaffSectionDashboard("reportConfirm", "staffReportConfirmDashboard", "クイックメニュー", "日報一覧から次の操作へ進めます", "report-list");
+  renderStaffSectionDashboard("reportConfirm", "staffReportConfirmDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "report-list");
 };
 
 const _renderStaffTaskListDashboardBase = renderStaffTaskList;
 renderStaffTaskList = function() {
   _renderStaffTaskListDashboardBase();
-  renderStaffSectionDashboard("staffTaskList", "staffTaskDashboard", "クイックメニュー", "担当タスク確認と次の操作をまとめています", "task-list");
+  renderStaffSectionDashboard("staffTaskList", "staffTaskDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "task-list");
 };
 
 if (document.readyState === "loading") {

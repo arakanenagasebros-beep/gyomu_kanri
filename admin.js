@@ -64,9 +64,9 @@ try{
   data.session.adminEditingUserId="";
   saveData(data);
   syncPull().then(changed=>{
-    if(changed && location.hash==="#admin" && data.session.adminAuthed) renderAdminHome();
+    if(changed && location.hash==="#admin-task-list" && data.session.adminAuthed) renderAdminTaskList();
   });
-  location.hash="#admin";
+  location.hash="#admin-task-list";
 }catch(e){$("adminAuthErr").textContent="通信エラー";$("adminAuthErr").style.display="block";}
 });
 $("adminLoginPw").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnAdminLogin").click()});
@@ -2018,29 +2018,43 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
   }
   mount.className = "dash-shell";
   const items = [
-    { key: "home", label: "ホーム" },
+    { key: "task", label: "業務管理" },
     { key: "report", label: "日報管理" },
-    { key: "task", label: "タスク" },
+    { key: "stamp", label: "スタンプ管理" },
     { key: "master", label: "設定" },
     { key: "month", label: "月次確認" }
   ];
   mount.innerHTML = `
     <div class="dash-head">
       <div>
-        <div class="dash-title">管理ナビ</div>
-        <div class="dash-sub">どの画面からでも主要メニューへ移動できます</div>
+        <div class="dash-title">業務管理ナビ</div>
+        <div class="dash-sub">どの管理画面からでも主要メニューと今日の合言葉を確認できます</div>
+      </div>
+    </div>
+    <div class="dash-grid" style="margin-bottom:12px;">
+      <div class="dash-card">
+        <div class="dash-label">今日の合言葉</div>
+        <div class="dash-value small" id="${mountId}DailyPassword">読み込み中...</div>
+        <div class="dash-note">管理画面のどこからでも確認できます</div>
       </div>
     </div>
     <div class="dash-actions">
       ${items.map(item => `<button type="button" class="dash-action${item.key === currentKey ? " admin" : ""}" data-admin-global="${item.key}">${item.label}<span>${item.key === currentKey ? "●" : ">"}</span></button>`).join("")}
     </div>
   `;
+  const pwEl = document.getElementById(`${mountId}DailyPassword`);
+  if (pwEl) {
+    pwEl.textContent = "読み込み中...";
+    fetchTodayPasswordForAdmin(false)
+      .then(pw => { pwEl.textContent = pw || "---"; })
+      .catch(() => { pwEl.textContent = "---"; });
+  }
   mount.querySelectorAll("[data-admin-global]").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.getAttribute("data-admin-global");
-      if (action === "home") location.hash = "#admin";
+      if (action === "task") location.hash = "#admin-task-list";
       else if (action === "report") location.hash = "#admin-report-mgmt";
-      else if (action === "task") location.hash = "#admin-task-list";
+      else if (action === "stamp") location.hash = "#admin";
       else if (action === "master") location.hash = "#admin-dropdown-edit";
       else if (action === "month") location.hash = "#admin-month-check";
     });
@@ -2050,7 +2064,9 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
 const _renderAdminHomeGlobalBase = renderAdminHome;
 renderAdminHome = function() {
   _renderAdminHomeGlobalBase();
-  hideAdminDuplicateNav("adminHome");
+  const title = document.querySelector("#adminHome .topbar .brand h1");
+  if (title) title.textContent = "スタンプ管理";
+  renderAdminGlobalDashboard("adminHome", "adminHomeGlobalNav", "stamp");
 };
 
 const _renderAdminReportMgmtGlobalBase = renderAdminReportMgmt;
@@ -2062,6 +2078,8 @@ renderAdminReportMgmt = function() {
 const _renderAdminTaskListGlobalBase = renderAdminTaskList;
 renderAdminTaskList = function() {
   _renderAdminTaskListGlobalBase();
+  const title = document.querySelector("#adminTaskList .topbar .brand h1");
+  if (title) title.textContent = "業務管理";
   renderAdminGlobalDashboard("adminTaskList", "adminTaskListNav", "task");
 };
 
@@ -2086,7 +2104,7 @@ renderAdminReportDetail = function() {
 const _renderAdminEditGlobalBase = renderAdminEdit;
 renderAdminEdit = function() {
   _renderAdminEditGlobalBase();
-  renderAdminGlobalDashboard("adminEdit", "adminEditNav", "home");
+  renderAdminGlobalDashboard("adminEdit", "adminEditNav", "stamp");
 };
 
 if (document.readyState === "loading") {
