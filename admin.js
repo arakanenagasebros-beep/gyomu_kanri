@@ -1577,3 +1577,326 @@ $("adminCredSave").addEventListener("click", async function(){
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initSync, {once:true});
   else initSync();
 })();
+
+function adminRebindNodeById(id, binder) {
+  const node = document.getElementById(id);
+  if (!node || !node.parentNode) return null;
+  const clone = node.cloneNode(true);
+  node.parentNode.replaceChild(clone, node);
+  if (binder) binder(clone);
+  return clone;
+}
+
+function installAdminDirectBindings() {
+  ["ardFilterYear", "ardFilterMonth", "ardFilterType"].forEach(id => {
+    adminRebindNodeById(id, node => {
+      node.addEventListener("change", () => doRenderARD());
+    });
+  });
+}
+
+const _doRenderARDDirectBase = doRenderARD;
+doRenderARD = function() {
+  const originalSaveData = saveData;
+  saveData = function() {};
+  try {
+    _doRenderARDDirectBase();
+  } finally {
+    saveData = originalSaveData;
+  }
+
+  const u = data.users[data.session.adminReportEditingUserId];
+  const tbody = $("ardTbody");
+  if (!u || !tbody) return;
+  const filtered = filterReports(u.reports, $("ardFilterYear").value, $("ardFilterMonth").value, $("ardFilterType").value);
+  const isShakaijin = u.userType === "遉ｾ莨壻ｺｺ";
+
+  Array.from(tbody.children).forEach((row, idx) => {
+    const report = filtered[idx];
+    const originalIndex = report ? u.reports.indexOf(report) : -1;
+    if (!report || originalIndex < 0) return;
+
+    const reviewInput = row.querySelector('input[type="number"]');
+    if (reviewInput && reviewInput.parentNode) {
+      const cloneInput = reviewInput.cloneNode(true);
+      reviewInput.parentNode.replaceChild(cloneInput, reviewInput);
+      cloneInput.addEventListener("change", () => {
+        const value = Math.max(0, parseInt(cloneInput.value, 10) || 0);
+        const patch = isShakaijin ? { incentiveAmount: value } : { proofCount: value };
+        setReportReviewRemote(u.id, report.reportId, originalIndex, patch)
+          .then(() => doRenderARD())
+          .catch(error => handleDirectActionError(error, "査定値の保存に失敗しました"));
+      });
+    }
+
+    const deleteBtn = row.querySelector("button.btn.danger.small");
+    if (deleteBtn && deleteBtn.parentNode) {
+      const cloneDelete = deleteBtn.cloneNode(true);
+      deleteBtn.parentNode.replaceChild(cloneDelete, deleteBtn);
+      cloneDelete.addEventListener("click", () => {
+        if (!confirm("この日報を削除しますか？")) return;
+        deleteReportRemote(u.id, report.reportId, originalIndex)
+          .then(() => doRenderARD())
+          .catch(error => handleDirectActionError(error, "日報削除に失敗しました"));
+      });
+    }
+  });
+};
+
+startEdit = function(td, u, oi, field) {
+  if (td.classList.contains("editing")) return;
+  td.classList.add("editing");
+  const report = u.reports[oi];
+  let inp;
+
+  if (field === "workType") {
+    inp = document.createElement("select");
+    [report.workType || ""].filter(Boolean).forEach(v => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      inp.appendChild(o);
+    });
+    inp.value = report.workType || "";
+  } else if (field === "date") {
+    inp = document.createElement("input");
+    inp.type = "date";
+    inp.value = report.date || "";
+  } else if (field === "startTime") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = `${report.startH}:${report.startM}`;
+  } else if (field === "endTime") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = `${report.endH}:${report.endM}`;
+  } else if (field === "breakTime") {
+    inp = document.createElement("select");
+    for (let i = 0; i <= 90; i += 15) {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = String(i);
+      inp.appendChild(o);
+    }
+    inp.value = String(parseInt(report.breakTime, 10) || 0);
+  } else if (field === "content") {
+    inp = document.createElement("textarea");
+    inp.value = report.content || "";
+  } else if (field === "taskType") {
+    inp = document.createElement("select");
+    getTaskTypes().forEach(v => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      inp.appendChild(o);
+    });
+    inp.value = report.taskType || "";
+  } else if (field === "manHours") {
+    inp = document.createElement("input");
+    inp.type = "number";
+    inp.min = "0";
+    inp.value = report.manHours || "";
+  } else if (field === "bizId") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = report.bizId || "";
+  } else if (field === "productId") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = report.productId || "";
+  } else if (field === "serviceId") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = report.serviceId || "";
+  } else if (field === "textCode") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = report.textCode || "";
+  } else if (field === "transport") {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = report.transport || "0";
+  } else {
+    inp = document.createElement("input");
+    inp.type = "text";
+    inp.value = td.textContent;
+  }
+
+  td.textContent = "";
+  td.appendChild(inp);
+  inp.focus();
+
+  let handled = false;
+  const save = async () => {
+    if (handled) return;
+    handled = true;
+    td.classList.remove("editing");
+
+    const next = Object.assign({}, report);
+    if (field === "date") next.date = inp.value;
+    else if (field === "workType") next.workType = inp.value;
+    else if (field === "startTime") {
+      const p = inp.value.split(":");
+      next.startH = pad2(parseInt(p[0], 10) || 0);
+      next.startM = pad2(parseInt(p[1], 10) || 0);
+    } else if (field === "endTime") {
+      const p = inp.value.split(":");
+      next.endH = pad2(parseInt(p[0], 10) || 0);
+      next.endM = pad2(parseInt(p[1], 10) || 0);
+    } else if (field === "breakTime") next.breakTime = inp.value;
+    else if (field === "content") next.content = inp.value;
+    else if (field === "taskType") next.taskType = inp.value;
+    else if (field === "manHours") next.manHours = inp.value;
+    else if (field === "bizId") next.bizId = inp.value;
+    else if (field === "productId") next.productId = inp.value;
+    else if (field === "serviceId") next.serviceId = inp.value;
+    else if (field === "textCode") next.textCode = inp.value;
+    else if (field === "transport") next.transport = inp.value;
+
+    const sh = parseInt(next.startH, 10) || 0;
+    const sm = parseInt(next.startM, 10) || 0;
+    const eh = parseInt(next.endH, 10) || 0;
+    const em = parseInt(next.endM, 10) || 0;
+    const brk = parseInt(next.breakTime, 10) || 0;
+    let minutes = (eh * 60 + em) - (sh * 60 + sm) - brk;
+    if (minutes < 0) minutes = 0;
+    next.workTime = `${Math.floor(minutes / 60)}h${minutes % 60 > 0 ? minutes % 60 + "m" : ""}`;
+
+    try {
+      await updateReportRemote(u.id, report.reportId, oi, next);
+      doRenderARD();
+    } catch (error) {
+      handleDirectActionError(error, "日報更新に失敗しました");
+      doRenderARD();
+    }
+  };
+
+  inp.addEventListener("blur", () => { save(); });
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter" && field !== "content") {
+      e.preventDefault();
+      inp.blur();
+    }
+  });
+};
+
+renderAdminEdit = function() {
+  const u = data.users[data.session.adminEditingUserId];
+  if (!u) {
+    location.hash = "#admin";
+    return;
+  }
+
+  $("editUserName").textContent = u.name || u.id;
+  $("editUserId").textContent = u.id;
+  $("editUid").value = u.id;
+  $("editUname").value = u.name || "";
+  $("editUpw").value = u.pw || "";
+  $("editUserType").value = u.userType || "";
+
+  const now = new Date();
+  const total = countTotal(u);
+  $("eTotal").textContent = total;
+  $("eMonth").textContent = countThisMonth(u, now);
+  $("eWeek").textContent = countThisWeek(u, now);
+  $("eMonthKey").textContent = ym(editMonthCursor);
+
+  const sInc = calcStampIncentive(total);
+  $("incentiveDisplay").innerHTML = `<div class="incentive-box"><div class="ib-title">Stamp Incentive</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計 ${total}pt</div></div>`;
+  $("editMonthLabel").textContent = monthLabelJa(editMonthCursor);
+
+  const hasPending = u.pendingStampRequest && u.pendingStampRequest.status === "pending";
+  if (hasPending) {
+    renderCalendar({
+      mount: $("editCal"),
+      monthCursor: editMonthCursor,
+      stampedMap: u.pendingStampRequest.stamps,
+      clickable: true,
+      onDayClick: async d => {
+        const key = ymd(d);
+        const nextStamps = cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {});
+        const cur = nextStamps[key];
+        if (!cur) nextStamps[key] = true;
+        else if (cur === true) nextStamps[key] = "emergency";
+        else delete nextStamps[key];
+        try {
+          await updateStampRequestDraftRemote(u.id, nextStamps);
+          renderAdminEdit();
+        } catch (error) {
+          handleDirectActionError(error, "申請下書きの更新に失敗しました");
+        }
+      },
+      pendingChanges: u.pendingStampRequest.stamps,
+      originalStamps: u.stamps
+    });
+  } else {
+    renderCalendar({
+      mount: $("editCal"),
+      monthCursor: editMonthCursor,
+      stampedMap: u.stamps,
+      clickable: true,
+      onDayClick: async d => {
+        const key = ymd(d);
+        const cur = u.stamps[key];
+        const nextValue = !cur ? true : (cur === true ? "emergency" : null);
+        try {
+          await setStampRemote(u.id, key, nextValue, null);
+          renderAdminEdit();
+        } catch (error) {
+          handleDirectActionError(error, "スタンプ更新に失敗しました");
+        }
+      }
+    });
+  }
+
+  let reqBar = document.getElementById("adminStampReqBar");
+  if (!reqBar) {
+    reqBar = document.createElement("div");
+    reqBar.id = "adminStampReqBar";
+    $("editCal").parentNode.appendChild(reqBar);
+  }
+  reqBar.innerHTML = "";
+
+  if (hasPending) {
+    reqBar.className = "admin-request-info";
+    reqBar.innerHTML = `<div class="ari-title">スタンプ修正申請</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">内容を確認して承認または却下してください</div>`;
+    const btnWrap = document.createElement("div");
+    btnWrap.style.cssText = "display:flex;gap:8px;";
+
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "btn success small";
+    approveBtn.textContent = "承認";
+    approveBtn.addEventListener("click", () => {
+      resolveStampCorrectionRemote(u.id, "approved")
+        .then(() => {
+          showModal({ title: "承認しました", sub: `${u.name || u.id} のスタンプを更新しました`, big: "OK" });
+          renderAdminEdit();
+        })
+        .catch(error => handleDirectActionError(error, "申請承認に失敗しました"));
+    });
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.className = "btn danger small";
+    rejectBtn.textContent = "却下";
+    rejectBtn.addEventListener("click", () => {
+      resolveStampCorrectionRemote(u.id, "rejected")
+        .then(() => {
+          showModal({ title: "却下しました", sub: `${u.name || u.id} の申請を却下しました`, big: "OK" });
+          renderAdminEdit();
+        })
+        .catch(error => handleDirectActionError(error, "申請却下に失敗しました"));
+    });
+
+    btnWrap.appendChild(approveBtn);
+    btnWrap.appendChild(rejectBtn);
+    reqBar.appendChild(btnWrap);
+  } else {
+    reqBar.className = "";
+  }
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", installAdminDirectBindings, { once: true });
+} else {
+  installAdminDirectBindings();
+}

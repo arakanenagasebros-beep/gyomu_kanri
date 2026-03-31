@@ -9,19 +9,23 @@ const LS_KEY="stampcard_v7_clean";
 /* ================================================================ */
 const API_URL_KEY = "stampcard_api_url";
 const DEFAULT_API_URL = window.APP_CONFIG?.DEFAULT_API_URL || "";
+const SYNC_VERSION_KEY = "stampcard_sync_version_v1";
+const LAST_SYNCED_KEY = "stampcard_last_synced_v1";
+const ACTION_QUEUE_KEY = "stampcard_action_queue_v1";
+const MAX_QUEUE_RETRY_DELAY_MS = 30000;
 let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
 localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
-function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); }
+function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); setTimeout(processQueue, 0); }
 function clearToken(){ sessionStorage.removeItem(TOKEN_KEY); }
 
-async function downloadDriveFile(fileId, fileName){
+async function downloadDriveFile(fileId, fileName, taskId){
   if(!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
   const t=getToken();
   if(!t){ showModal({title:"未ログインです",big:"⚠️"}); return; }
-  const url = API_URL + "?action=download&token=" + encodeURIComponent(t) + "&fileId=" + encodeURIComponent(fileId);
+  const url = API_URL + "?action=download&token=" + encodeURIComponent(t) + "&fileId=" + encodeURIComponent(fileId) + (taskId!=null?"&taskId="+encodeURIComponent(taskId):"");
   const resp = await fetch(url, { redirect:"follow" });
   const r = await resp.json();
   if(!r.ok){ showModal({title:"ダウンロード失敗",sub:(r.error||"unknown"),big:"⚠️"}); return; }
@@ -57,7 +61,7 @@ async function fetchTodayPasswordForAdmin(forceRefresh=false){
   }
 }
 
-let _syncVersion = 0;
+let _syncVersion = parseInt(localStorage.getItem(SYNC_VERSION_KEY) || "0", 10) || 0;
 let _syncTimer = null;
 let _isSyncing = false;
 let _lastSyncTime = null;
@@ -139,9 +143,11 @@ function setupApiModal() {
 // ==========================================
 // ▼▼▼ スマート同期システム（差分自動検知） ▼▼▼
 // ==========================================
-let lastSyncedDataStr = localStorage.getItem(LS_KEY) || "{}";
-let actionQueue = [];
+let lastSyncedDataStr = localStorage.getItem(LAST_SYNCED_KEY) || "";
+let actionQueue = loadPersistedActionQueue();
 let isSending = false;
+let skipNextSaveDataSync = false;
+let needsQueueRebuild = false;
 
 function serializeDataForSync(src) {
   const clean = JSON.parse(JSON.stringify(src || {}));
@@ -151,33 +157,115 @@ function serializeDataForSync(src) {
   return clean;
 }
 
+function loadPersistedActionQueue() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACTION_QUEUE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistActionQueue() {
+  localStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(actionQueue));
+}
+
+function persistSyncVersion() {
+  localStorage.setItem(SYNC_VERSION_KEY, String(_syncVersion || 0));
+}
+
+function persistSyncedBaseline(serialized) {
+  lastSyncedDataStr = serialized || "{}";
+  localStorage.setItem(LAST_SYNCED_KEY, lastSyncedDataStr);
+}
+
+function syncMetaFromResult(result) {
+  if (!result || typeof result !== "object") return null;
+  return { version: result.version, updatedAt: result.updatedAt };
+}
+
 function saveLocalOnly(d) {
   localStorage.setItem(LS_KEY, JSON.stringify(d));
 }
 
+function saveLocalAsSynced(d, syncMeta) {
+  saveLocalOnly(d);
+  persistSyncedBaseline(JSON.stringify(serializeDataForSync(d)));
+  if (syncMeta && syncMeta.version != null) {
+    _syncVersion = parseInt(syncMeta.version, 10) || 0;
+    persistSyncVersion();
+  }
+  if (syncMeta && syncMeta.updatedAt) _lastSyncTime = Date.parse(syncMeta.updatedAt) || Date.now();
+}
+
+if (!lastSyncedDataStr) {
+  try {
+    const localRaw = localStorage.getItem(LS_KEY) || "{}";
+    persistSyncedBaseline(JSON.stringify(serializeDataForSync(JSON.parse(localRaw))));
+  } catch (e) {
+    persistSyncedBaseline("{}");
+  }
+}
+
 
 function queueAction(action, payload) {
-  actionQueue.push({ action, payload });
+  actionQueue.push({ action, payload, retryCount: 0, nextAttemptAt: 0 });
+  persistActionQueue();
   processQueue();
+}
+
+function scheduleQueueRetry(req, message) {
+  req.retryCount = (req.retryCount || 0) + 1;
+  const delay = Math.min(1000 * Math.pow(2, Math.min(req.retryCount, 5)), MAX_QUEUE_RETRY_DELAY_MS);
+  req.nextAttemptAt = Date.now() + delay;
+  persistActionQueue();
+  updateSyncUI("err", (message || "送信エラー") + `（${Math.round(delay / 1000)}秒後に再送）`);
+  setTimeout(processQueue, delay);
+}
+
+async function handleQueueVersionConflict() {
+  updateSyncUI("warn", "別端末の更新を取り込み中...");
+  const desiredLocal = JSON.parse(JSON.stringify(data));
+  actionQueue = [];
+  persistActionQueue();
+  const ok = await forceSyncPull();
+  if (!ok) {
+    updateSyncUI("err", "競合解決の最新取得に失敗");
+    return;
+  }
+  data = desiredLocal;
+  saveLocalOnly(data);
+  saveData(data);
+  updateSyncUI("loading", "最新状態へ差分を再送中...");
 }
 
 async function processQueue() {
   if (isSending || actionQueue.length === 0 || !API_URL) return;
+  const req = actionQueue[0];
+  if (req.nextAttemptAt && req.nextAttemptAt > Date.now()) {
+    setTimeout(processQueue, Math.min(req.nextAttemptAt - Date.now(), 1000));
+    return;
+  }
   isSending = true;
-  const req = actionQueue.shift();
   updateSyncUI("loading", "保存中...");
   try {
-    req.payload._action = req.action;
-    req.payload.token = getToken();
+    const body = Object.assign({}, req.payload, {
+      _action: req.action,
+      token: getToken(),
+      _baseVersion: _syncVersion
+    });
     const resp = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(req.payload),
+      body: JSON.stringify(body),
       redirect: "follow"
     });
     const result = await resp.json();
     if (result.ok) {
+      actionQueue.shift();
+      persistActionQueue();
       _syncVersion = result.version || _syncVersion + 1;
+      persistSyncVersion();
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "同期済み ✓");
     } else {
@@ -187,6 +275,11 @@ async function processQueue() {
     updateSyncUI("err", "通信エラー");
   }
   isSending = false;
+  if (needsQueueRebuild) {
+    needsQueueRebuild = false;
+    saveData(data);
+    return;
+  }
   processQueue();
 }
 
@@ -225,7 +318,7 @@ function downloadTaskFiles(task) {
   if (task.fileIds && task.fileIds.length) {
     for (let i = 0; i < task.fileIds.length; i++) {
       if (task.fileIds[i]) {
-        downloadDriveFile(task.fileIds[i], (task.fileNames && task.fileNames[i]) || "download");
+        downloadDriveFile(task.fileIds[i], (task.fileNames && task.fileNames[i]) || "download", task.id);
       }
     }
     return;
@@ -268,6 +361,11 @@ async function syncPull() {
 }
 
 function saveData(d) {
+  if (skipNextSaveDataSync) {
+    skipNextSaveDataSync = false;
+    saveLocalAsSynced(d);
+    return;
+  }
   saveLocalOnly(d);
   const oldD = JSON.parse(lastSyncedDataStr || "{}");
   const newD = serializeDataForSync(d);
@@ -377,6 +475,8 @@ async function forceSyncPull() {
   }
 }
 
+if (actionQueue.length && getToken()) setTimeout(processQueue, 0);
+
 // スタンプ申請の件数を取得
 function countPendingStampRequests() {
   let count = 0;
@@ -406,7 +506,9 @@ function migrateData() {
   if(!data.staffWorkStatus)data.staffWorkStatus={};
   if(!data.session)data.session={userId:"",adminAuthed:false,adminEditingUserId:"",adminReportEditingUserId:""};
   if(!data.session.adminReportEditingUserId)data.session.adminReportEditingUserId="";
+  Object.keys(data.staffWorkStatus).forEach(key=>{const u=findUserByStaffRef(key);if(u&&u.id!==key&&data.staffWorkStatus[u.id]==null){data.staffWorkStatus[u.id]=data.staffWorkStatus[key];delete data.staffWorkStatus[key]}});
   data.tasks.forEach(t=>{if(!t.fileNames){t.fileNames=t.fileName?[t.fileName]:[];if(t.fileName)delete t.fileName}});
+  data.tasks.forEach(t=>{if(!t.staffUserId){const u=findUserByStaffRef(t.staff);if(u)t.staffUserId=u.id}});
   if(data.taskTypes){data.taskTypes=data.taskTypes.map(t=>t==="その他（時給）"?"時給":t)}
   data.tasks.forEach(t=>{if(t.taskType==="その他（時給）")t.taskType="時給"});
   if(data.taskPrices&&data.taskPrices["その他（時給）"]!=null){data.taskPrices["時給"]=data.taskPrices["その他（時給）"];delete data.taskPrices["その他（時給）"]}
@@ -434,7 +536,7 @@ function initSync() {
 }
 
 /* === DRIVE FILE UPLOAD === */
-async function uploadFileToDrive(file) {
+async function uploadFileToDrive(file, taskId) {
   if (!API_URL) return null;
   return new Promise(function(resolve) {
     var reader = new FileReader();
@@ -444,7 +546,7 @@ async function uploadFileToDrive(file) {
         var resp = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ _action: "uploadFile", token: getToken(), fileName: file.name, mimeType: file.type || "application/octet-stream", data: b64 }),
+          body: JSON.stringify({ _action: "uploadFile", token: getToken(), taskId: taskId || "", fileName: file.name, mimeType: file.type || "application/octet-stream", data: b64 }),
           redirect: "follow"
         });
         var result = await resp.json();
@@ -456,6 +558,344 @@ async function uploadFileToDrive(file) {
   });
 }
 /* === END SYNC LAYER === */
+
+function applyRemoteSyncData(remoteData) {
+  const clean = sanitizeRemoteData(remoteData || {});
+  data = JSON.parse(JSON.stringify(clean));
+  saveLocalAsSynced(data, {
+    version: remoteData && remoteData._version != null ? remoteData._version : _syncVersion,
+    updatedAt: remoteData && remoteData._updatedAt ? remoteData._updatedAt : null
+  });
+  migrateData();
+  _lastSyncTime = Date.now();
+  return clean;
+}
+
+async function processQueue() {
+  if (isSending || actionQueue.length === 0 || !API_URL) return;
+  const req = actionQueue[0];
+  if (req.nextAttemptAt && req.nextAttemptAt > Date.now()) {
+    setTimeout(processQueue, Math.min(req.nextAttemptAt - Date.now(), 1000));
+    return;
+  }
+  isSending = true;
+  updateSyncUI("loading", "同期送信中...");
+  try {
+    const body = Object.assign({}, req.payload, {
+      _action: req.action,
+      token: getToken(),
+      _baseVersion: _syncVersion
+    });
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(body),
+      redirect: "follow"
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      actionQueue.shift();
+      persistActionQueue();
+      _syncVersion = result.version || (_syncVersion + 1);
+      persistSyncVersion();
+      _lastSyncTime = Date.now();
+      updateSyncUI("ok", "同期済み");
+    } else if (result.error === "version_conflict") {
+      await handleQueueVersionConflict();
+    } else {
+      scheduleQueueRetry(req, result.error || "同期エラー");
+    }
+  } catch (e) {
+    scheduleQueueRetry(req, "通信エラー");
+  }
+  isSending = false;
+  processQueue();
+}
+
+async function syncPull() {
+  if (!API_URL || _isSyncing) return false;
+  const idle = await waitForQueueIdle();
+  if (!idle) return false;
+  _isSyncing = true;
+  try {
+    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const result = await resp.json();
+    if (result.ok && result.data) {
+      const remoteVer = result.data._version || 0;
+      if (remoteVer > _syncVersion) {
+        applyRemoteSyncData(result.data);
+        updateSyncUI("ok", "同期済み");
+        return true;
+      }
+      _lastSyncTime = Date.now();
+      updateSyncUI("ok", "最新");
+      return false;
+    }
+    updateSyncUI("err", "読み込みエラー");
+    return false;
+  } catch (e) {
+    updateSyncUI("err", "通信エラー");
+    return false;
+  } finally {
+    _isSyncing = false;
+  }
+}
+
+function saveData(d) {
+  if (skipNextSaveDataSync) {
+    skipNextSaveDataSync = false;
+    saveLocalAsSynced(d);
+    return;
+  }
+
+  saveLocalOnly(d);
+  if (isSending) {
+    needsQueueRebuild = true;
+    return;
+  }
+  const oldD = JSON.parse(lastSyncedDataStr || "{}");
+  const newD = serializeDataForSync(d);
+  const nextQueue = [];
+
+  const oldTasksById = new Map((oldD.tasks || []).map(t => [t.id, t]));
+  const newTasksById = new Map((newD.tasks || []).map(t => [t.id, t]));
+  newTasksById.forEach((nT, id) => {
+    const oT = oldTasksById.get(id);
+    if (!oT || JSON.stringify(oT) !== JSON.stringify(nT)) {
+      nextQueue.push({ action: "updateTask", payload: { task: nT, isDelete: false }, retryCount: 0, nextAttemptAt: 0 });
+    }
+  });
+  oldTasksById.forEach((oT, id) => {
+    if (!newTasksById.has(id)) {
+      nextQueue.push({ action: "updateTask", payload: { task: { id: oT.id }, isDelete: true }, retryCount: 0, nextAttemptAt: 0 });
+    }
+  });
+
+  const oldUsers = oldD.users || {};
+  const newUsers = newD.users || {};
+  Object.keys(newUsers).forEach(uid => {
+    if (JSON.stringify(oldUsers[uid]) !== JSON.stringify(newUsers[uid])) {
+      nextQueue.push({ action: "updateUserFull", payload: { targetUserId: uid, userObj: newUsers[uid] }, retryCount: 0, nextAttemptAt: 0 });
+    }
+  });
+
+  if (JSON.stringify(oldD.taskTypes) !== JSON.stringify(newD.taskTypes)) nextQueue.push({ action: "updateMaster", payload: { taskTypes: newD.taskTypes }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.taskPrices) !== JSON.stringify(newD.taskPrices)) nextQueue.push({ action: "updateMaster", payload: { taskPrices: newD.taskPrices }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.employees) !== JSON.stringify(newD.employees)) nextQueue.push({ action: "updateMaster", payload: { employees: newD.employees }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.userHourlyRates) !== JSON.stringify(newD.userHourlyRates)) nextQueue.push({ action: "updateMaster", payload: { userHourlyRates: newD.userHourlyRates }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) nextQueue.push({ action: "updateMaster", payload: { staffWorkStatus: newD.staffWorkStatus }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) nextQueue.push({ action: "updateMaster", payload: { lockedMonths: newD.lockedMonths }, retryCount: 0, nextAttemptAt: 0 });
+
+  const deletedUids = Object.keys(oldUsers).filter(uid => !newUsers[uid]);
+  if (deletedUids.length) nextQueue.push({ action: "updateMaster", payload: { deleteUserId: deletedUids }, retryCount: 0, nextAttemptAt: 0 });
+
+  actionQueue = nextQueue;
+  persistActionQueue();
+  processQueue();
+}
+
+async function syncCheckVersion() {
+  if (!API_URL || _isSyncing || isSending || actionQueue.length) return;
+  try {
+    const resp = await fetch(API_URL + "?action=version&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const result = await resp.json();
+    if (result.ok && (result.version || 0) > _syncVersion) {
+      await syncPull();
+    }
+  } catch (e) {
+  }
+}
+
+async function forceSyncPull() {
+  if (!API_URL) return false;
+  await waitForQueueIdle();
+  const wasSyncing = _isSyncing;
+  _isSyncing = true;
+  try {
+    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const result = await resp.json();
+    if (result.ok && result.data) {
+      applyRemoteSyncData(result.data);
+      updateSyncUI("ok", "同期済み");
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  } finally {
+    _isSyncing = wasSyncing;
+  }
+}
+
+async function postDirectAction(action, payload) {
+  if (!API_URL) throw new Error("API not configured");
+  const token = getToken();
+  if (!token) throw new Error("not logged in");
+  const resp = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify(Object.assign({
+      _action: action,
+      token,
+      _baseVersion: _syncVersion
+    }, payload || {})),
+    redirect: "follow"
+  });
+  const result = await resp.json();
+  if (result && result.ok) {
+    if (result.version != null) {
+      _syncVersion = parseInt(result.version, 10) || _syncVersion;
+      persistSyncVersion();
+    }
+    if (result.updatedAt) _lastSyncTime = Date.parse(result.updatedAt) || Date.now();
+    return result;
+  }
+  if (result && result.error === "version_conflict") {
+    await forceSyncPull();
+    throw new Error("version_conflict");
+  }
+  throw new Error((result && result.error) || "request_failed");
+}
+
+function cloneDeep(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function ensureLocalUser(userId) {
+  data.users = data.users || {};
+  data.users[userId] = data.users[userId] || { id: userId, stamps: {}, reports: [], pendingStampRequest: null };
+  ensureUserShape(data.users[userId]);
+  return data.users[userId];
+}
+
+function ensureLocalReportId(report) {
+  if (!report) return "";
+  if (!report.reportId) report.reportId = "report_local_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+  return report.reportId;
+}
+
+function findLocalReportIndex(user, reportId, fallbackIndex) {
+  if (!user || !Array.isArray(user.reports)) return -1;
+  if (reportId) {
+    const idx = user.reports.findIndex(r => String((r && r.reportId) || "") === String(reportId));
+    if (idx >= 0) return idx;
+  }
+  return typeof fallbackIndex === "number" ? fallbackIndex : -1;
+}
+
+function applyDirectUserSync(userId, nextUser, result) {
+  data.users = data.users || {};
+  data.users[userId] = cloneDeep(nextUser);
+  saveLocalAsSynced(data, syncMetaFromResult(result));
+}
+
+async function setStampRemote(targetUserId, date, value, metaPatch) {
+  const result = await postDirectAction("setStamp", { targetUserId, date, value, metaPatch: metaPatch || null });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function setStampMetaRemote(targetUserId, metaPatch) {
+  const result = await postDirectAction("setStampMeta", { targetUserId, metaPatch: metaPatch || {} });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function requestStampCorrectionRemote(targetUserId, stamps) {
+  const result = await postDirectAction("requestStampCorrection", { targetUserId, stamps: cloneDeep(stamps || {}) });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function updateStampRequestDraftRemote(targetUserId, stamps) {
+  const result = await postDirectAction("updateStampRequestDraft", { targetUserId, stamps: cloneDeep(stamps || {}) });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function resolveStampCorrectionRemote(targetUserId, decision) {
+  const result = await postDirectAction("resolveStampCorrection", { targetUserId, decision });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function clearStampRequestStateRemote(targetUserId) {
+  const result = await postDirectAction("clearStampRequestState", { targetUserId });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result;
+}
+
+async function addReportRemote(targetUserId, report) {
+  const result = await postDirectAction("addReport", { targetUserId, report: cloneDeep(report || {}) });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result.report || null;
+}
+
+async function updateReportRemote(targetUserId, reportId, reportIndex, patch) {
+  const result = await postDirectAction("updateReport", {
+    targetUserId,
+    reportId: reportId || "",
+    reportIndex,
+    patch: cloneDeep(patch || {})
+  });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result.report || null;
+}
+
+async function deleteReportRemote(targetUserId, reportId, reportIndex) {
+  const result = await postDirectAction("deleteReport", {
+    targetUserId,
+    reportId: reportId || "",
+    reportIndex
+  });
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return true;
+}
+
+async function setReportReviewRemote(targetUserId, reportId, reportIndex, reviewPatch) {
+  const result = await postDirectAction("setReportReview", Object.assign({
+    targetUserId,
+    reportId: reportId || "",
+    reportIndex
+  }, cloneDeep(reviewPatch || {})));
+  if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+  return result.report || null;
+}
+
+function buildReportPayloadFromForm(transportValueOverride) {
+  const wt = $("rpWorkType").value;
+  const report = {
+    date: $("rpDate").value,
+    workType: wt,
+    startH: $("rpStartH").value,
+    startM: $("rpStartM").value,
+    endH: $("rpEndH").value,
+    endM: $("rpEndM").value,
+    breakTime: $("rpBreak").value,
+    workTime: $("rpWorkTime").value,
+    content: $("rpContent").value
+  };
+  if (wt === "在宅") {
+    report.taskType = $("rpTaskType").value;
+    report.manHours = $("rpManHours").value;
+  } else {
+    report.transport = transportValueOverride != null ? transportValueOverride : $("rpTransport").value;
+    report.bizId = $("rpBizId").value;
+    report.productId = $("rpProductId").value;
+    report.serviceId = $("rpServiceId").value;
+    report.textCode = $("rpTextCode").value;
+    report.year = $("rpYear").value;
+  }
+  return report;
+}
+
+function handleDirectActionError(error, fallbackMessage) {
+  if (error && error.message === "version_conflict") {
+    showModal({ title: "最新データに更新しました", sub: "もう一度操作してください", big: "🔄" });
+    return;
+  }
+  showModal({ title: "通信エラー", sub: (error && error.message) || fallbackMessage || "保存に失敗しました", big: "📡" });
+}
 
 
 /* ================================================================ */
@@ -520,15 +960,78 @@ migrateData();
 function getUserHourlyRate(userId){return data.userHourlyRates&&data.userHourlyRates[userId]!=null?data.userHourlyRates[userId]:HOURLY_RATE}
 // ⑩修正: 初回はlocalStorageのみ保存（APIへの差分送信はスキップ）
 localStorage.setItem(LS_KEY, JSON.stringify(data));
-lastSyncedDataStr = JSON.stringify(serializeDataForSync(data));
+if (!lastSyncedDataStr) persistSyncedBaseline(JSON.stringify(serializeDataForSync(data)));
 
 function getTaskPrice(name){return data.taskPrices&&data.taskPrices[name]!=null?data.taskPrices[name]:(TASK_PRICES[name]!=null?TASK_PRICES[name]:null)}
 function getTaskTypes(){return data.taskTypes||DEFAULT_TASK_TYPES}
 function getEmployees(){return data.employees||DEFAULT_EMPLOYEES}
-function getStaffNames(){return Object.values(data.users).map(u=>u.name||u.id)}
+function getUserDisplayName(u){return u?(u.name||u.id||""):""}
+function getStaffUsers(){return Object.values(data.users||{}).filter(Boolean)}
+function getStaffNames(){return getStaffUsers().map(getUserDisplayName)}
+function findUserByStaffRef(staffRef){
+  if(staffRef==null)return null;
+  const ref=String(staffRef);
+  return getStaffUsers().find(u=>String(u.id||"")===ref||getUserDisplayName(u)===ref)||null
+}
 function getUserTypeByStaffName(staffName){
-  const u=Object.values(data.users).find(x=>(x.name||x.id)===staffName);
+  const u=findUserByStaffRef(staffName);
   return u?u.userType:"";
+}
+function getTaskStaffUserId(task){
+  if(!task)return"";
+  if(task.staffUserId!=null&&task.staffUserId!=="")return String(task.staffUserId);
+  const u=findUserByStaffRef(task.staff);
+  return u?String(u.id):"";
+}
+function getTaskStaffLabel(task){
+  const u=findUserByStaffRef(task&&(task.staffUserId||task.staff));
+  if(u)return getUserDisplayName(u);
+  return task&&task.staff?task.staff:"";
+}
+function taskMatchesStaffRef(task,staffRef){
+  if(!staffRef||staffRef==="全て")return true;
+  const ref=String(staffRef);
+  return getTaskStaffUserId(task)===ref||getTaskStaffLabel(task)===ref||String(task&&task.staff||"")===ref
+}
+function setTaskStaffRef(task,staffRef){
+  if(!task)return;
+  const ref=staffRef==null?"":String(staffRef);
+  if(!ref||ref==="未指定"){task.staff="未指定";delete task.staffUserId;return}
+  const u=findUserByStaffRef(ref);
+  if(u){task.staffUserId=u.id;task.staff=getUserDisplayName(u);return}
+  task.staff=ref;delete task.staffUserId;
+}
+function getStaffWorkStatusForRef(staffRef){
+  if(!data.staffWorkStatus)return"";
+  const u=findUserByStaffRef(staffRef);
+  if(!u)return data.staffWorkStatus[staffRef]||"";
+  const label=getUserDisplayName(u);
+  return data.staffWorkStatus[u.id]||data.staffWorkStatus[label]||"";
+}
+function setStaffWorkStatusForRef(staffRef,value){
+  data.staffWorkStatus=data.staffWorkStatus||{};
+  const u=findUserByStaffRef(staffRef);
+  if(!u){data.staffWorkStatus[staffRef]=value;return}
+  const label=getUserDisplayName(u);
+  data.staffWorkStatus[u.id]=value;
+  if(label!==u.id&&data.staffWorkStatus[label]!=null)delete data.staffWorkStatus[label];
+}
+function renameStaffReferences(oldId,oldName,newId,newName){
+  const oldRefs=[String(oldId||""),String(oldName||"")].filter(Boolean);
+  const nextLabel=newName||newId||oldName||oldId||"";
+  (data.tasks||[]).forEach(t=>{
+    if(oldRefs.includes(String(t.staffUserId||""))||oldRefs.includes(String(t.staff||""))){
+      if(newId)t.staffUserId=newId;
+      t.staff=nextLabel;
+    }
+  });
+  if(!data.staffWorkStatus)return;
+  let migrated;
+  oldRefs.forEach(ref=>{
+    if(data.staffWorkStatus[ref]!=null&&migrated==null)migrated=data.staffWorkStatus[ref];
+    if(ref!==newId)delete data.staffWorkStatus[ref];
+  });
+  if(migrated!=null&&newId)data.staffWorkStatus[newId]=migrated;
 }
 
 /* === CORE FUNCTIONS === */
@@ -554,28 +1057,31 @@ function filterReports(reps,y,m,wt){reps=reps||[];return reps.filter(r=>{if(!r.d
 function renderWorkload(container,staffFilter){
   if(!container)return;
   container.innerHTML="";
-  const staffNames=staffFilter?[staffFilter]:getStaffNames();
+  const staffRefs=staffFilter?[staffFilter]:getStaffUsers().map(u=>String(u.id||getUserDisplayName(u)));
   const grid=document.createElement("div");grid.className="workload-grid";
   function applyWlColor(sel){sel.classList.remove("wl-want","wl-ok","wl-busy");
     if(sel.value==="業務が欲しい")sel.classList.add("wl-want");
     else if(sel.value==="まだ余裕あり")sel.classList.add("wl-ok");
     else if(sel.value==="厳しい")sel.classList.add("wl-busy")}
-  staffNames.forEach(name=>{
-    const active=data.tasks.filter(t=>t.staff===name&&(t.status==="依頼中"||t.status==="期限超過"));
+  staffRefs.forEach(staffRef=>{
+    const user=findUserByStaffRef(staffRef);
+    const label=user?getUserDisplayName(user):String(staffRef);
+    const name=label;
+    const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffRef)&&(t.status==="依頼中"||t.status==="期限超過"));
     const irai=active.filter(t=>t.status==="依頼中").length;
     const kigen=active.filter(t=>t.status==="期限超過").length;
-    const autoSt=autoWorkloadStatus(name);
+    const autoSt=autoWorkloadStatus(staffRef);
     const card=document.createElement("div");card.className="workload-card";
     card.innerHTML=`<div class="wl-name">${escapeHtml(name)}</div><div class="wl-counts">依頼中: <span style="color:var(--blue)">${irai}</span>　期限超過: <span style="color:var(--red)">${kigen}</span></div>`;
     const sel=document.createElement("select");
-    const tp=getUserTypeByStaffName(name);
+    const tp=getUserTypeByStaffName(staffRef);
     const opts=(tp==="社会人")?["空いている","まだ余裕あり","厳しい"]:["業務が欲しい","まだ余裕あり","厳しい"];
     opts.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o)});
     sel.value=autoSt;applyWlColor(sel);
     if(tp==="社会人"){
       sel.disabled=true;
     } else {
-      sel.addEventListener("change",()=>{data.staffWorkStatus[name]=sel.value;saveData(data);applyWlColor(sel)});
+      sel.addEventListener("change",()=>{setStaffWorkStatusForRef(staffRef,sel.value);saveData(data);applyWlColor(sel)});
     }
     card.appendChild(sel);grid.appendChild(card);
   });
@@ -587,7 +1093,7 @@ function checkOverdue(){const today=ymd(new Date());let changed=false;data.tasks
 
 /* Auto workload status */
 function autoWorkloadStatus(staffName){
-  const active=data.tasks.filter(t=>(t.staff===staffName)&&(t.status==="依頼中"||t.status==="期限超過")).length;
+  const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffName)&&(t.status==="依頼中"||t.status==="期限超過")).length;
   const tp=getUserTypeByStaffName(staffName);
   if(tp==="社会人"){
     if(active>=3)return"厳しい";
@@ -596,7 +1102,7 @@ function autoWorkloadStatus(staffName){
   }
   if(active>=2)return"厳しい";
   if(active===0)return"まだ余裕あり";
-  return data.staffWorkStatus[staffName]||"業務が欲しい";
+  return getStaffWorkStatusForRef(staffName)||"業務が欲しい";
 }
 
 /* Task sequence number */

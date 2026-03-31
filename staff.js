@@ -1328,3 +1328,304 @@ function renderAdminNotifications(){
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", initSync, {once:true});
   else initSync();
 })();
+
+function rebindNodeById(id, binder) {
+  const node = document.getElementById(id);
+  if (!node || !node.parentNode) return null;
+  const clone = node.cloneNode(true);
+  node.parentNode.replaceChild(clone, node);
+  if (binder) binder(clone);
+  return clone;
+}
+
+async function submitStaffReportRemote(andContinue) {
+  const targetUserId = data.session.userId;
+  const currentUser = data.users[targetUserId];
+  if (!currentUser) return false;
+
+  const transportOverride = andContinue && rpTransportLocked ? "0" : undefined;
+  const reportPayload = buildReportPayloadFromForm(transportOverride);
+  const currentReport = editingReportIdx >= 0 ? currentUser.reports[editingReportIdx] : null;
+
+  try {
+    if (currentReport) {
+      await updateReportRemote(targetUserId, currentReport.reportId, editingReportIdx, reportPayload);
+    } else {
+      await addReportRemote(targetUserId, reportPayload);
+    }
+  } catch (error) {
+    handleDirectActionError(error, "日報の保存に失敗しました");
+    return false;
+  }
+
+  editingReportIdx = -1;
+
+  if (adminEditingReportMode) {
+    adminEditingReportMode = false;
+    data.session.userId = adminEditOrigUserId;
+    saveLocalOnly(data);
+    location.hash = "#admin-report-detail";
+    return true;
+  }
+
+  if (!andContinue) {
+    location.hash = "#report-confirm";
+    return true;
+  }
+
+  const prevDate = $("rpDate").value;
+  const prevEndH = $("rpEndH").value;
+  const prevEndM = $("rpEndM").value;
+  rpTransportLocked = true;
+  initReportForm();
+  $("rpDate").value = prevDate;
+  $("rpStartH").value = prevEndH;
+  $("rpStartM").value = prevEndM;
+  $("rpTransport").value = "0";
+  $("rpTransport").readOnly = true;
+  $("rpTransport").style.opacity = "0.5";
+  calcWorkTime();
+  showModal({ title: "保存しました", sub: "続けて次の日報を入力できます", big: "OK" });
+  return true;
+}
+
+async function handleStaffStampDirect() {
+  const u = data.users[data.session.userId];
+  if (!u) return;
+  const now = new Date();
+  const key = ymd(now);
+  if (u.stamps[key]) return;
+  if (u.stampFailed === key) {
+    showModal({ title: "本日は入力済みです", sub: "明日もう一度お試しください", big: "!" });
+    return;
+  }
+
+  const ans = prompt("今日のパスワードを入力してください");
+  if (ans === null) return;
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ _action: "verifyDailyPassword", token: getToken(), answer: ans }),
+      redirect: "follow"
+    });
+    const result = await resp.json();
+    if (!(result.ok && result.match)) {
+      await setStampMetaRemote(u.id, { stampFailed: key });
+      const btn = $("bigStampBtn");
+      if (btn) {
+        btn.classList.add("done");
+        const emoji = btn.querySelector(".emoji");
+        const label = btn.querySelector(".label");
+        if (emoji) emoji.textContent = "X";
+        if (label) label.textContent = "本日失敗";
+        btn.disabled = true;
+      }
+      showModal({ title: "パスワードが違います", sub: "本日は再入力できません", big: "!" });
+      return;
+    }
+  } catch (error) {
+    showModal({ title: "通信エラー", sub: "パスワード確認に失敗しました", big: "!" });
+    return;
+  }
+
+  try {
+    await setStampRemote(u.id, key, true, { stampFailed: null });
+  } catch (error) {
+    handleDirectActionError(error, "スタンプ保存に失敗しました");
+    return;
+  }
+
+  const syncedUser = data.users[data.session.userId];
+  if (!syncedUser) return;
+  const monthKey = ym(now);
+  const prevCongrats = syncedUser.lastCongrats50 || 0;
+  const metaPatch = {};
+  let monthFirstMsg = null;
+
+  if (syncedUser.lastMonthFirstStamp !== monthKey) {
+    syncedUser.lastMonthFirstStamp = monthKey;
+    metaPatch.lastMonthFirstStamp = monthKey;
+    const prevMonthStart = addMonths(startOfMonth(now), -1);
+    const prevMonthEnd = endOfMonth(prevMonthStart);
+    const prevCount = countRangeDays(syncedUser, prevMonthStart, prevMonthEnd);
+    monthFirstMsg = {
+      title: "先月の振り返り",
+      sub: `先月の出勤日数: ${prevCount}日`,
+      body: getMonthlyComment(prevCount),
+      big: "OK",
+      small: monthLabelJa(prevMonthStart)
+    };
+  }
+
+  const afterStamp = async bonusPoint => {
+    if (bonusPoint && bonusPoint > 1) {
+      syncedUser.bonusPoints = (syncedUser.bonusPoints || 0) + (bonusPoint - 1);
+      metaPatch.bonusPoints = syncedUser.bonusPoints;
+    }
+
+    const total = countTotal(syncedUser);
+    const milestone = Math.floor(total / 50);
+    const reachedMilestone = milestone > 0 && milestone > prevCongrats;
+    if (reachedMilestone) {
+      syncedUser.lastCongrats50 = milestone;
+      metaPatch.lastCongrats50 = milestone;
+    }
+
+    if (Object.keys(metaPatch).length) {
+      try {
+        await setStampMetaRemote(syncedUser.id, metaPatch);
+      } catch (error) {
+        handleDirectActionError(error, "スタンプ付帯情報の保存に失敗しました");
+        return;
+      }
+    }
+
+    if (reachedMilestone) {
+      showConfetti();
+      showModalCb({
+        title: "おめでとう",
+        sub: `累計 ${milestone * 50}pt`,
+        body: "節目ボーナスに到達しました",
+        big: "OK",
+        small: "引き続き頑張ってください"
+      }, () => {
+        userMonthCursor = startOfMonth(new Date());
+        location.hash = "#user";
+      });
+      return;
+    }
+
+    if (monthFirstMsg) {
+      showModalCb(monthFirstMsg, () => {
+        userMonthCursor = startOfMonth(new Date());
+        location.hash = "#user";
+      });
+      return;
+    }
+
+    showConfetti();
+    showModalCb({
+      title: "スタンプ完了",
+      sub: "出勤スタンプを登録しました",
+      body: `累計 ${total}pt`,
+      big: "OK",
+      small: "ナイス出勤"
+    }, () => {
+      userMonthCursor = startOfMonth(new Date());
+      location.hash = "#user";
+    });
+  };
+
+  if (Math.random() < 0.33) {
+    startLottery(point => {
+      afterStamp(point).catch(error => handleDirectActionError(error, "スタンプ付帯情報の保存に失敗しました"));
+    });
+  } else {
+    await afterStamp(0);
+  }
+}
+
+function installStaffDirectBindings() {
+  rebindNodeById("bigStampBtn", btn => {
+    btn.addEventListener("click", () => {
+      handleStaffStampDirect().catch(error => handleDirectActionError(error, "スタンプ保存に失敗しました"));
+    });
+  });
+
+  rebindNodeById("btnAddReport", btn => {
+    btn.addEventListener("click", () => {
+      submitStaffReportRemote(false).catch(error => handleDirectActionError(error, "日報保存に失敗しました"));
+    });
+  });
+
+  rebindNodeById("btnAddAndContinue", btn => {
+    btn.addEventListener("click", () => {
+      submitStaffReportRemote(true).catch(error => handleDirectActionError(error, "日報保存に失敗しました"));
+    });
+  });
+
+  ["rcFilterYear", "rcFilterMonth", "rcFilterType"].forEach(id => {
+    rebindNodeById(id, node => {
+      node.addEventListener("change", () => doRenderReportList());
+    });
+  });
+}
+
+const _renderUserHomeDirectBase = renderUserHome;
+renderUserHome = function() {
+  _renderUserHomeDirectBase();
+  const u = data.users[data.session.userId];
+  if (!u) return;
+
+  const stampRequestArea = $("stampRequestArea");
+  if (stampRequestArea && u.pendingStampRequest && (u.pendingStampRequest.status === "approved" || u.pendingStampRequest.status === "rejected")) {
+    const dismissBtn = stampRequestArea.querySelector("button");
+    if (dismissBtn && dismissBtn.parentNode) {
+      const clone = dismissBtn.cloneNode(true);
+      dismissBtn.parentNode.replaceChild(clone, dismissBtn);
+      clone.addEventListener("click", () => {
+        clearStampRequestStateRemote(u.id)
+          .then(() => renderUserHome())
+          .catch(error => handleDirectActionError(error, "申請状態のクリアに失敗しました"));
+      });
+    }
+  }
+
+  if (typeof stampEditMode !== "undefined" && stampEditMode) {
+    const bar = $("stampApplyBar");
+    if (bar && !bar.classList.contains("hidden")) {
+      const buttons = bar.querySelectorAll("button.btn.primary.small");
+      const applyBtn = buttons.length ? buttons[buttons.length - 1] : null;
+      if (applyBtn && applyBtn.parentNode) {
+        const clone = applyBtn.cloneNode(true);
+        applyBtn.parentNode.replaceChild(clone, applyBtn);
+        clone.addEventListener("click", () => {
+          requestStampCorrectionRemote(u.id, stampEditStamps)
+            .then(() => {
+              stampEditMode = false;
+              stampEditStamps = {};
+              stampEditEmergencyMode = false;
+              showModal({ title: "申請を送信しました", sub: "管理側の確認をお待ちください", big: "OK" });
+              renderUserHome();
+            })
+            .catch(error => handleDirectActionError(error, "申請送信に失敗しました"));
+        });
+      }
+    }
+  }
+};
+
+const _doRenderReportListDirectBase = doRenderReportList;
+doRenderReportList = function() {
+  _doRenderReportListDirectBase();
+  const u = data.users[data.session.userId];
+  const tbody = $("reportTbody");
+  if (!u || !tbody) return;
+
+  Array.from(tbody.querySelectorAll("button.btn.danger.small")).forEach(button => {
+    if (!button.parentNode) return;
+    const clone = button.cloneNode(true);
+    button.parentNode.replaceChild(clone, button);
+    clone.addEventListener("click", () => {
+      const row = clone.closest("tr");
+      if (!row) return;
+      const rows = Array.from(tbody.children);
+      const rowIndex = rows.indexOf(row);
+      const filtered = filterReports(u.reports, $("rcFilterYear").value, $("rcFilterMonth").value, $("rcFilterType").value);
+      const report = filtered[rowIndex];
+      const originalIndex = report ? u.reports.indexOf(report) : -1;
+      if (!report || originalIndex < 0) return;
+      deleteReportRemote(u.id, report.reportId, originalIndex)
+        .then(() => renderReportConfirm())
+        .catch(error => handleDirectActionError(error, "日報削除に失敗しました"));
+    });
+  });
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", installStaffDirectBindings, { once: true });
+} else {
+  installStaffDirectBindings();
+}
