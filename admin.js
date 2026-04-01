@@ -2237,6 +2237,9 @@ renderAdminGlobalDashboard = function(sectionId, mountId, currentKey) {
 const _renderAdminHomeGlobalBase = renderAdminHome;
 renderAdminHome = function() {
   _renderAdminHomeGlobalBase();
+  const legacyTodayPassword = document.getElementById("adminTodayPassword");
+  const legacyTodayPasswordCard = legacyTodayPassword && legacyTodayPassword.closest(".card");
+  if (legacyTodayPasswordCard) legacyTodayPasswordCard.remove();
   const title = document.querySelector("#adminHome .topbar .brand h1");
   if (title) title.textContent = "スタンプ管理";
   renderAdminGlobalDashboard("adminHome", "adminHomeGlobalNav", "stamp");
@@ -2248,6 +2251,12 @@ renderAdminOverviewDashboard = function() {};
 const _renderAdminReportMgmtGlobalBase = renderAdminReportMgmt;
 renderAdminReportMgmt = function() {
   _renderAdminReportMgmtGlobalBase();
+  const subTabs = document.getElementById("armSubTabs");
+  if (subTabs) subTabs.remove();
+  const addUserCard = document.getElementById("armAddUserCard");
+  if (addUserCard) addUserCard.remove();
+  const summaryCard = document.getElementById("armSummaryCard");
+  if (summaryCard) summaryCard.classList.remove("hidden");
   renderAdminGlobalDashboard("adminReportMgmt", "adminReportMgmtNav", "report");
 };
 
@@ -2262,6 +2271,15 @@ renderAdminTaskList = function() {
 const _renderDropdownEditGlobalBase = renderDropdownEdit;
 renderDropdownEdit = function() {
   _renderDropdownEditGlobalBase();
+  const section = document.getElementById("adminDropdownEdit");
+  const grid = section && section.querySelector(".grid");
+  const employeeList = document.getElementById("ddEmployeeList");
+  const staffList = document.getElementById("ddStaffList");
+  const employeeCard = employeeList && employeeList.closest(".card");
+  const staffCard = staffList && staffList.closest(".card");
+  if (grid && employeeCard && staffCard && employeeCard !== staffCard) {
+    grid.insertBefore(staffCard, employeeCard);
+  }
   renderAdminGlobalDashboard("adminDropdownEdit", "adminDropdownEditNav", "master");
 };
 
