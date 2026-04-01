@@ -47,28 +47,34 @@ $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEvent
 async function bootstrapDefaultStaffIfNeeded(){
   if (_defaultStaffBootstrapPromise) return _defaultStaffBootstrapPromise;
   if (!data.session.adminAuthed || !API_URL || !getToken()) return false;
-  if (Object.keys(data.users || {}).length) return false;
+  const missingStaff = DEFAULT_BOOTSTRAP_STAFF.filter(staff => !((data.users || {})[staff.id]));
+  if (!missingStaff.length) return false;
 
   _defaultStaffBootstrapPromise = (async () => {
     const created = [];
+    const failed = [];
     try {
-      for (const staff of DEFAULT_BOOTSTRAP_STAFF) {
-        const resp = await fetch(API_URL, {
-          method: "POST",
-          headers: {"Content-Type":"text/plain"},
-          body: JSON.stringify({
-            _action: "upsertStaffUser",
-            token: getToken(),
-            id: staff.id,
-            pw: staff.pw,
-            name: staff.name,
-            userType: staff.userType
-          }),
-          redirect: "follow"
-        });
-        const result = await resp.json();
-        if (!result.ok) throw new Error(result.error || "bootstrap failed");
-        created.push(staff.id);
+      for (const staff of missingStaff) {
+        try {
+          const resp = await fetch(API_URL, {
+            method: "POST",
+            headers: {"Content-Type":"text/plain"},
+            body: JSON.stringify({
+              _action: "upsertStaffUser",
+              token: getToken(),
+              id: staff.id,
+              pw: staff.pw,
+              name: staff.name,
+              userType: staff.userType
+            }),
+            redirect: "follow"
+          });
+          const result = await resp.json();
+          if (!result.ok) throw new Error(result.error || "bootstrap failed");
+          created.push(staff.id);
+        } catch (error) {
+          failed.push(`${staff.id}: ${error && error.message ? error.message : "error"}`);
+        }
       }
 
       data.users = data.users || {};
@@ -85,7 +91,10 @@ async function bootstrapDefaultStaffIfNeeded(){
       });
       saveData(data);
       try { await syncPull(); } catch (_error) {}
-      return true;
+      if (failed.length) {
+        showModal({title:"一部スタッフ未作成",sub:`${failed.length}件失敗しました`,big:"⚠️"});
+      }
+      return created.length > 0;
     } catch (error) {
       if (created.length) {
         try { await syncPull(); } catch (_error) {}
@@ -1260,6 +1269,9 @@ function renderDropdownEdit(){
     btn.addEventListener("click",()=>{if(!confirm(`「${data.employees[i]}」を削除しますか？`))return;data.employees.splice(i,1);saveData(data);renderDropdownEdit()});btns.appendChild(btn);eList.appendChild(div)});
   // Staff list with full edit & delete
   const sList=$("ddStaffList");sList.innerHTML="";
+  const addWrap=document.createElement("div");addWrap.style.marginBottom="10px";
+  const addBtn=document.createElement("button");addBtn.className="btn primary";addBtn.textContent="スタッフ追加";
+  addBtn.addEventListener("click",()=>openStaffCreate());addWrap.appendChild(addBtn);sList.appendChild(addWrap);
   Object.values(data.users).sort((a,b)=>{const aT=(a.userType||"学生")==="社会人"?0:1;const bT=(b.userType||"学生")==="社会人"?0:1;return aT!==bT?aT-bT:(a.createdAt||0)-(b.createdAt||0)}).forEach(u=>{
     const hr=getUserHourlyRate(u.id);const cls=u.userType==="社会人"?"tag shakaijin":"tag student";
     const div=document.createElement("div");div.className="dd-item";
@@ -1312,12 +1324,32 @@ dBtn.addEventListener("click", async ()=>{
 }
 /* === STAFF EDIT OVERLAY === */
 let _staffEditId = null;
+let _staffEditMode = "edit";
+
+function setStaffEditOverlayTitle(text) {
+  const titleEl = document.querySelector("#staffEditOverlay h3");
+  if (titleEl) titleEl.textContent = text;
+}
+
+function openStaffCreate() {
+  _staffEditId = "__new__";
+  _staffEditMode = "create";
+  setStaffEditOverlayTitle("スタッフ新規追加");
+  $("seId").value = "";
+  $("sePw").value = "";
+  $("seName").value = "";
+  $("seType").value = "学生";
+  $("seRate").value = "1300";
+  $("staffEditOverlay").style.display = "flex";
+}
 async function openStaffEdit(userId) {
   _staffEditId = userId;
+  _staffEditMode = "edit";
   try {
     await syncPull();
   } catch (_error) {}
   const u = data.users[userId]; if (!u) return;
+  setStaffEditOverlayTitle("スタッフ情報編集");
   $("seId").value = u.id;
   $("sePw").value = u.pw || "";
   $("seName").value = u.name || "";
@@ -1416,6 +1448,200 @@ $("staffEditOverlay").style.display = "none";
 renderDropdownEdit();
 showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
 });
+
+/* function installStaffEditSaveOverride() {
+  const oldBtn = $("staffEditSave");
+  if (!oldBtn || oldBtn.dataset.overrideInstalled === "1") return;
+  const newBtn = oldBtn.cloneNode(true);
+  newBtn.dataset.overrideInstalled = "1";
+  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+  newBtn.addEventListener("click", async () => {
+    const isCreate = _staffEditMode === "create";
+    const oldId = _staffEditId;
+    const existingUser = !isCreate && oldId ? data.users[oldId] : null;
+    if (!isCreate && !existingUser) return;
+
+    const newId = $("seId").value.trim();
+    const newPw = $("sePw").value.trim();
+    const newName = $("seName").value.trim();
+    const newType = $("seType").value;
+    const newRate = parseInt($("seRate").value, 10);
+
+    if (!newId) { showModal({ title: "ID縺ｯ蠢・医〒縺・, big: "笞・・ }); return; }
+    if ((isCreate || newId !== oldId) && data.users[newId]) { showModal({ title: "ID縺碁㍾隍・＠縺ｦ縺・∪縺・, big: "ｧｩ" }); return; }
+    if (!API_URL) { showModal({title:"API譛ｪ謗･邯・,sub:"笞吶〒URL繧定ｨｭ螳壹＠縺ｦ縺上□縺輔＞",big:"伯"}); return; }
+    if (!newPw && isCreate) { showModal({ title: "PW縺ｯ蠢・医〒縺・, big: "笞・・ }); return; }
+
+    try {
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain"},
+        body: JSON.stringify({
+          _action: "upsertStaffUser",
+          token: getToken(),
+          id: newId,
+          pw: newPw || (existingUser && existingUser.pw) || "",
+          name: newName || newId,
+          userType: newType
+        }),
+        redirect: "follow"
+      });
+      const r = await resp.json();
+      if (!r.ok) {
+        showModal({title: "繧ｨ繝ｩ繝ｼ", sub: r.error, big: "圻"});
+        return;
+      }
+
+      if (!isCreate && newId !== oldId) {
+        const delResp = await fetch(API_URL, {
+          method: "POST",
+          headers: {"Content-Type": "text/plain"},
+          body: JSON.stringify({
+            _action: "deleteStaffUser",
+            token: getToken(),
+            id: oldId
+          }),
+          redirect: "follow"
+        });
+        const delResult = await delResp.json();
+        if (!delResult.ok) {
+          showModal({title: "譌ｧID蜑企勁螟ｱ謨・, sub: delResult.error || "繧ｨ繝ｩ繝ｼ", big: "圻"});
+          return;
+        }
+      }
+    } catch (e) {
+      showModal({title: "騾壻ｿ｡繧ｨ繝ｩ繝ｼ", big: "藤"});
+      return;
+    }
+
+    const targetUser = isCreate ? {} : existingUser;
+    targetUser.id = newId;
+    targetUser.name = newName || newId;
+    targetUser.userType = newType;
+    targetUser.pw = newPw || targetUser.pw || "";
+    targetUser.createdAt = targetUser.createdAt || Date.now();
+
+    data.users = data.users || {};
+    data.userHourlyRates = data.userHourlyRates || {};
+    data.users[newId] = targetUser;
+    if (!isNaN(newRate) && newRate >= 0) data.userHourlyRates[newId] = newRate;
+
+    if (!isCreate && newId !== oldId) {
+      delete data.users[oldId];
+      if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+        if (data.userHourlyRates[newId] == null) data.userHourlyRates[newId] = data.userHourlyRates[oldId];
+        delete data.userHourlyRates[oldId];
+      }
+    }
+
+    _staffEditId = newId;
+    _staffEditMode = "edit";
+    setStaffEditOverlayTitle("スタッフ情報編集");
+    saveData(data);
+    $("staffEditOverlay").style.display = "none";
+    renderDropdownEdit();
+    showModal({ title: isCreate ? "スタッフ追加完了" : "譖ｴ譁ｰ螳御ｺ・, sub: `${targetUser.name || targetUser.id}`, big: "笨・ });
+  });
+}
+
+installStaffEditSaveOverride(); */
+
+function installStaffEditSaveOverride() {
+  const oldBtn = $("staffEditSave");
+  if (!oldBtn || oldBtn.dataset.overrideInstalled === "1") return;
+  const newBtn = oldBtn.cloneNode(true);
+  newBtn.dataset.overrideInstalled = "1";
+  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+  newBtn.addEventListener("click", async () => {
+    const isCreate = _staffEditMode === "create";
+    const oldId = _staffEditId;
+    const existingUser = !isCreate && oldId && oldId !== "__new__" ? data.users[oldId] : null;
+    if (!isCreate && !existingUser) return;
+
+    const newId = $("seId").value.trim();
+    const newPw = $("sePw").value.trim();
+    const newName = $("seName").value.trim();
+    const newType = $("seType").value;
+    const newRate = parseInt($("seRate").value, 10);
+
+    if (!newId) { showModal({ title: "ID is required", big: "NG" }); return; }
+    if ((isCreate || newId !== oldId) && data.users[newId]) { showModal({ title: "ID already exists", big: "NG" }); return; }
+    if (!API_URL) { showModal({ title: "API not connected", sub: "Check URL in settings", big: "NG" }); return; }
+    if (!newPw && isCreate) { showModal({ title: "PW is required", big: "NG" }); return; }
+
+    try {
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type": "text/plain"},
+        body: JSON.stringify({
+          _action: "upsertStaffUser",
+          token: getToken(),
+          id: newId,
+          pw: newPw || (existingUser && existingUser.pw) || "",
+          name: newName || newId,
+          userType: newType
+        }),
+        redirect: "follow"
+      });
+      const r = await resp.json();
+      if (!r.ok) {
+        showModal({ title: "Save failed", sub: r.error || "error", big: "NG" });
+        return;
+      }
+
+      if (!isCreate && newId !== oldId) {
+        const delResp = await fetch(API_URL, {
+          method: "POST",
+          headers: {"Content-Type": "text/plain"},
+          body: JSON.stringify({
+            _action: "deleteStaffUser",
+            token: getToken(),
+            id: oldId
+          }),
+          redirect: "follow"
+        });
+        const delResult = await delResp.json();
+        if (!delResult.ok) {
+          showModal({ title: "Delete old ID failed", sub: delResult.error || "error", big: "NG" });
+          return;
+        }
+      }
+    } catch (e) {
+      showModal({ title: "Network error", big: "NG" });
+      return;
+    }
+
+    const targetUser = isCreate ? {} : existingUser;
+    targetUser.id = newId;
+    targetUser.name = newName || newId;
+    targetUser.userType = newType;
+    targetUser.pw = newPw || targetUser.pw || "";
+    targetUser.createdAt = targetUser.createdAt || Date.now();
+
+    data.users = data.users || {};
+    data.userHourlyRates = data.userHourlyRates || {};
+    data.users[newId] = targetUser;
+    if (!isNaN(newRate) && newRate >= 0) data.userHourlyRates[newId] = newRate;
+
+    if (!isCreate && newId !== oldId) {
+      delete data.users[oldId];
+      if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
+        if (data.userHourlyRates[newId] == null) data.userHourlyRates[newId] = data.userHourlyRates[oldId];
+        delete data.userHourlyRates[oldId];
+      }
+    }
+
+    _staffEditId = newId;
+    _staffEditMode = "edit";
+    setStaffEditOverlayTitle("スタッフ情報編集");
+    saveData(data);
+    $("staffEditOverlay").style.display = "none";
+    renderDropdownEdit();
+    showModal({ title: isCreate ? "Staff added" : "Updated", sub: `${targetUser.name || targetUser.id}`, big: "OK" });
+  });
+}
+
+installStaffEditSaveOverride();
 
 function openDdEdit(idx){
   ddEditIdx=idx;
