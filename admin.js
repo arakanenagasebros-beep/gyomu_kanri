@@ -1911,15 +1911,86 @@ function getAdminOverviewStats() {
 }
 
 function openPendingStampSummary() {
+  data.session = data.session || {};
+  data.session.adminHomeFilter = "pending-stamp";
+  saveLocalOnly(data);
   location.hash = "#admin";
 }
 
 function openOverdueTaskSummary() {
+  if (data.session && data.session.adminHomeFilter) {
+    delete data.session.adminHomeFilter;
+    saveLocalOnly(data);
+  }
   location.hash = "#admin-task-list";
   setTimeout(() => {
     if ($("atlStatus")) $("atlStatus").value = "期限超過";
     if (typeof doRenderATL === "function") doRenderATL();
   }, 120);
+}
+
+function clearAdminHomeSummaryFilter() {
+  data.session = data.session || {};
+  if (!data.session.adminHomeFilter) return;
+  delete data.session.adminHomeFilter;
+  saveLocalOnly(data);
+}
+
+function applyAdminHomeSummaryFilter() {
+  const section = document.getElementById("adminHome");
+  const tbody = document.getElementById("adminTbody");
+  if (!section || !tbody) return;
+
+  const filterKey = (data.session && data.session.adminHomeFilter) || "";
+  let notice = document.getElementById("adminHomeSummaryFilter");
+  if (filterKey !== "pending-stamp") {
+    if (notice) notice.remove();
+    Array.from(tbody.querySelectorAll("tr")).forEach(row => { row.style.display = ""; });
+    return;
+  }
+
+  const pendingIds = new Set(
+    Object.entries(data.users || {})
+      .filter(([, user]) => user && user.pendingStampRequest && user.pendingStampRequest.status === "pending")
+      .map(([id, user]) => String((user && user.id) || id || ""))
+  );
+
+  let visibleCount = 0;
+  Array.from(tbody.querySelectorAll("tr")).forEach(row => {
+    const idCell = row.children[1];
+    const rowId = String((idCell && idCell.textContent) || "").trim();
+    const visible = pendingIds.has(rowId);
+    row.style.display = visible ? "" : "none";
+    if (visible) visibleCount += 1;
+  });
+
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "adminHomeSummaryFilter";
+    notice.className = "card";
+    const cards = section.querySelectorAll(".card");
+    const anchor = cards[cards.length - 1] || null;
+    if (anchor && anchor.parentNode === section) section.insertBefore(notice, anchor);
+    else section.appendChild(notice);
+  }
+
+  notice.innerHTML = `
+    <div class="bd" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:900;">Pending stamp requests</div>
+        <div class="sub">${visibleCount} user(s) are shown</div>
+      </div>
+      <button type="button" class="btn small" id="adminHomeSummaryFilterClear">Show all</button>
+    </div>
+  `;
+
+  const clearBtn = document.getElementById("adminHomeSummaryFilterClear");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      clearAdminHomeSummaryFilter();
+      renderAdminHome();
+    });
+  }
 }
 
 function renderAdminOverviewDashboard() {
@@ -2073,7 +2144,10 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
       const action = btn.getAttribute("data-admin-global");
       if (action === "task") location.hash = "#admin-task-list";
       else if (action === "report") location.hash = "#admin-report-mgmt";
-      else if (action === "stamp") location.hash = "#admin";
+      else if (action === "stamp") {
+        clearAdminHomeSummaryFilter();
+        location.hash = "#admin";
+      }
       else if (action === "master") location.hash = "#admin-dropdown-edit";
       else if (action === "month") location.hash = "#admin-month-check";
     });
@@ -2166,7 +2240,10 @@ renderAdminHome = function() {
   const title = document.querySelector("#adminHome .topbar .brand h1");
   if (title) title.textContent = "スタンプ管理";
   renderAdminGlobalDashboard("adminHome", "adminHomeGlobalNav", "stamp");
+  applyAdminHomeSummaryFilter();
 };
+
+renderAdminOverviewDashboard = function() {};
 
 const _renderAdminReportMgmtGlobalBase = renderAdminReportMgmt;
 renderAdminReportMgmt = function() {
