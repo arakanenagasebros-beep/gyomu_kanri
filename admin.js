@@ -1242,7 +1242,7 @@ let ddEditType=""; // "taskType" or ""
 function renderDropdownEdit(){
   renderAdminNotifications();
   renderAdminCreds();
-  if (!Object.keys(data.users || {}).length) {
+  if (DEFAULT_BOOTSTRAP_STAFF.some(staff => !((data.users || {})[staff.id]))) {
     bootstrapDefaultStaffIfNeeded().then(created => {
       if (created && location.hash === "#admin-dropdown-edit" && data.session.adminAuthed) renderDropdownEdit();
     });
@@ -2542,7 +2542,7 @@ renderAdminGlobalDashboard = function(sectionId, mountId, currentKey) {
 const _renderAdminHomeGlobalBase = renderAdminHome;
 renderAdminHome = function() {
   _renderAdminHomeGlobalBase();
-  if (!Object.keys(data.users || {}).length) {
+  if (DEFAULT_BOOTSTRAP_STAFF.some(staff => !((data.users || {})[staff.id]))) {
     bootstrapDefaultStaffIfNeeded().then(created => {
       if (created && location.hash === "#admin" && data.session.adminAuthed) renderAdminHome();
     });
@@ -2616,3 +2616,5 @@ if (document.readyState === "loading") {
 } else {
   installAdminDirectBindings();
 }
+
+route();
