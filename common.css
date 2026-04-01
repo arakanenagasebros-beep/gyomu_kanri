@@ -267,6 +267,8 @@ td.editing textarea{min-height:40px;resize:vertical;}
 .dash-label{font-size:11px;font-weight:700;color:var(--muted);}
 .dash-value{margin-top:6px;font-size:24px;font-weight:900;font-family:var(--font-display);}
 .dash-value.small{font-size:16px;line-height:1.4;}
+.dash-value-link{margin-top:6px;padding:0;border:0;background:transparent;color:var(--text);font-size:24px;font-weight:900;font-family:var(--font-display);text-align:left;cursor:pointer;}
+.dash-value-link:hover{text-decoration:underline;}
 .dash-note{margin-top:6px;font-size:11px;color:var(--muted);}
 .dash-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 .dash-action{flex:1 1 150px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-radius:16px;border:1px solid rgba(45,27,78,.08);background:rgba(255,255,255,.92);cursor:pointer;font-weight:800;font-family:var(--font-body);color:var(--text);box-shadow:0 4px 14px rgba(45,27,78,.06);}

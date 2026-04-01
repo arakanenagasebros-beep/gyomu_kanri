@@ -1910,6 +1910,18 @@ function getAdminOverviewStats() {
   };
 }
 
+function openPendingStampSummary() {
+  location.hash = "#admin";
+}
+
+function openOverdueTaskSummary() {
+  location.hash = "#admin-task-list";
+  setTimeout(() => {
+    if ($("atlStatus")) $("atlStatus").value = "期限超過";
+    if (typeof doRenderATL === "function") doRenderATL();
+  }, 120);
+}
+
 function renderAdminOverviewDashboard() {
   const section = document.getElementById("adminHome");
   if (!section) return;
@@ -1970,6 +1982,8 @@ function renderAdminOverviewDashboard() {
   mount.querySelectorAll("[data-admin-nav]").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.getAttribute("data-admin-nav");
+      if (action === "pending-stamp") { openPendingStampSummary(); return; }
+      if (action === "overdue-task") { openOverdueTaskSummary(); return; }
       if (action === "pending-stamp") {
         const reqUser = Object.values(data.users || {}).find(user => user && user.pendingStampRequest && user.pendingStampRequest.status === "pending");
         if (reqUser) {
@@ -1998,7 +2012,8 @@ function renderAdminOverviewDashboard() {
 const _renderAdminHomeDashboardBase = renderAdminHome;
 renderAdminHome = function() {
   _renderAdminHomeDashboardBase();
-  renderAdminOverviewDashboard();
+  const oldOverview = document.getElementById("adminOverviewDashboard");
+  if (oldOverview) oldOverview.remove();
 };
 
 function hideAdminDuplicateNav(sectionId) {
@@ -2020,6 +2035,7 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
     else section.appendChild(mount);
   }
   mount.className = "dash-shell";
+  const stats = getAdminOverviewStats();
   const items = [
     { key: "task", label: "業務管理" },
     { key: "report", label: "日報管理" },
@@ -2063,6 +2079,86 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
     });
   });
 }
+
+renderAdminGlobalDashboard = function(sectionId, mountId, currentKey) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  hideAdminDuplicateNav(sectionId);
+  const topbar = section.querySelector(".topbar");
+  let mount = document.getElementById(mountId);
+  if (!mount) {
+    mount = document.createElement("div");
+    mount.id = mountId;
+    if (topbar && topbar.parentNode === section) section.insertBefore(mount, topbar.nextSibling);
+    else section.appendChild(mount);
+  }
+  mount.className = "dash-shell";
+
+  const stats = getAdminOverviewStats();
+  const items = [
+    { key: "task", label: "業務管理" },
+    { key: "report", label: "日報管理" },
+    { key: "stamp", label: "スタンプ管理" },
+    { key: "master", label: "設定" },
+    { key: "month", label: "月次確認" }
+  ];
+
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">業務管理ナビ</div>
+        <div class="dash-sub">どの管理画面からでも主要メニューと今日の合言葉を確認できます</div>
+      </div>
+    </div>
+    <div class="dash-grid" style="margin-bottom:12px;">
+      <div class="dash-card">
+        <div class="dash-label">今日の合言葉</div>
+        <div class="dash-value small" id="${mountId}DailyPassword">読み込み中...</div>
+        <div class="dash-note">管理画面のどこからでも確認できます</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">スタンプ申請</div>
+        <button type="button" class="dash-value-link" data-admin-summary="pending-stamp">${stats.pendingStamp}</button>
+        <div class="dash-note">数字を押すと申請一覧へ移動</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-label">期限超過タスク</div>
+        <button type="button" class="dash-value-link" data-admin-summary="overdue-task">${stats.overdueTasks}</button>
+        <div class="dash-note">数字を押すと業務一覧へ移動</div>
+      </div>
+    </div>
+    <div class="dash-actions">
+      ${items.map(item => `<button type="button" class="dash-action${item.key === currentKey ? " admin" : ""}" data-admin-global="${item.key}">${item.label}<span>${item.key === currentKey ? "●" : ">"}</span></button>`).join("")}
+    </div>
+  `;
+
+  const pwEl = document.getElementById(`${mountId}DailyPassword`);
+  if (pwEl) {
+    pwEl.textContent = "読み込み中...";
+    fetchTodayPasswordForAdmin(false)
+      .then(pw => { pwEl.textContent = pw || "---"; })
+      .catch(() => { pwEl.textContent = "---"; });
+  }
+
+  mount.querySelectorAll("[data-admin-global]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-admin-global");
+      if (action === "task") location.hash = "#admin-task-list";
+      else if (action === "report") location.hash = "#admin-report-mgmt";
+      else if (action === "stamp") location.hash = "#admin";
+      else if (action === "master") location.hash = "#admin-dropdown-edit";
+      else if (action === "month") location.hash = "#admin-month-check";
+    });
+  });
+
+  mount.querySelectorAll("[data-admin-summary]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-admin-summary");
+      if (action === "pending-stamp") openPendingStampSummary();
+      else if (action === "overdue-task") openOverdueTaskSummary();
+    });
+  });
+};
 
 const _renderAdminHomeGlobalBase = renderAdminHome;
 renderAdminHome = function() {
