@@ -1,6 +1,24 @@
 /* === VIEWS (admin-specific) === */
 const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
 
+const DEFAULT_BOOTSTRAP_STAFF = [
+  { id: "shakai_test", pw: "shakai_test", name: "テスト社会人", userType: "社会人" },
+  { id: "ogasawara", pw: "ogasawara", name: "小笠原", userType: "社会人" },
+  { id: "morotomi", pw: "morotomi", name: "諸富", userType: "社会人" },
+  { id: "osawa", pw: "osawa", name: "大澤", userType: "社会人" },
+  { id: "yoneoka", pw: "yoneoka", name: "米岡", userType: "社会人" },
+  { id: "hosaka", pw: "hosaka", name: "保坂", userType: "社会人" },
+  { id: "gakusei_test", pw: "gakusei_test", name: "テスト学生", userType: "学生" },
+  { id: "miko", pw: "miko", name: "神子", userType: "学生" },
+  { id: "shirakawa", pw: "shirakawa", name: "白川", userType: "学生" },
+  { id: "matsumoto", pw: "matsumoto", name: "松本", userType: "学生" },
+  { id: "mizutani", pw: "mizutani", name: "水谷", userType: "学生" },
+  { id: "takeuchi", pw: "takeuchi", name: "竹内", userType: "学生" },
+  { id: "fujikawa", pw: "fujikawa", name: "藤川", userType: "学生" },
+  { id: "kobayashi", pw: "kobayashi", name: "小林", userType: "学生" }
+];
+let _defaultStaffBootstrapPromise = null;
+
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none";var se=document.getElementById("staffEditOverlay");if(se)se.style.display="none"}});
@@ -25,6 +43,62 @@ window.addEventListener("hashchange",route);
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
 function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
 $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEventListener("click",doAdminLogout);$("atlLogout").addEventListener("click",doAdminLogout);$("ddeLogout").addEventListener("click",doAdminLogout);
+
+async function bootstrapDefaultStaffIfNeeded(){
+  if (_defaultStaffBootstrapPromise) return _defaultStaffBootstrapPromise;
+  if (!data.session.adminAuthed || !API_URL || !getToken()) return false;
+  if (Object.keys(data.users || {}).length) return false;
+
+  _defaultStaffBootstrapPromise = (async () => {
+    const created = [];
+    try {
+      for (const staff of DEFAULT_BOOTSTRAP_STAFF) {
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          headers: {"Content-Type":"text/plain"},
+          body: JSON.stringify({
+            _action: "upsertStaffUser",
+            token: getToken(),
+            id: staff.id,
+            pw: staff.pw,
+            name: staff.name,
+            userType: staff.userType
+          }),
+          redirect: "follow"
+        });
+        const result = await resp.json();
+        if (!result.ok) throw new Error(result.error || "bootstrap failed");
+        created.push(staff.id);
+      }
+
+      data.users = data.users || {};
+      data.userHourlyRates = data.userHourlyRates || {};
+      DEFAULT_BOOTSTRAP_STAFF.forEach((staff, index) => {
+        data.users[staff.id] = Object.assign({}, data.users[staff.id] || {}, {
+          id: staff.id,
+          name: staff.name,
+          userType: staff.userType,
+          pw: staff.pw,
+          createdAt: (data.users[staff.id] && data.users[staff.id].createdAt) || (Date.now() + index)
+        });
+        data.userHourlyRates[staff.id] = 1300;
+      });
+      saveData(data);
+      try { await syncPull(); } catch (_error) {}
+      return true;
+    } catch (error) {
+      if (created.length) {
+        try { await syncPull(); } catch (_error) {}
+      }
+      showModal({title:"初期スタッフ作成に失敗",sub:error && error.message ? error.message : "error",big:"⚠️"});
+      return false;
+    } finally {
+      _defaultStaffBootstrapPromise = null;
+    }
+  })();
+
+  return _defaultStaffBootstrapPromise;
+}
 
 // Login
 $("btnUserLogin").addEventListener("click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
@@ -1159,6 +1233,11 @@ let ddEditType=""; // "taskType" or ""
 function renderDropdownEdit(){
   renderAdminNotifications();
   renderAdminCreds();
+  if (!Object.keys(data.users || {}).length) {
+    bootstrapDefaultStaffIfNeeded().then(created => {
+      if (created && location.hash === "#admin-dropdown-edit" && data.session.adminAuthed) renderDropdownEdit();
+    });
+  }
   // Task Types with prices
   const ttList=$("ddTaskTypeList");ttList.innerHTML="";
   getTaskTypes().forEach((t,i)=>{
@@ -2237,6 +2316,11 @@ renderAdminGlobalDashboard = function(sectionId, mountId, currentKey) {
 const _renderAdminHomeGlobalBase = renderAdminHome;
 renderAdminHome = function() {
   _renderAdminHomeGlobalBase();
+  if (!Object.keys(data.users || {}).length) {
+    bootstrapDefaultStaffIfNeeded().then(created => {
+      if (created && location.hash === "#admin" && data.session.adminAuthed) renderAdminHome();
+    });
+  }
   const legacyTodayPassword = document.getElementById("adminTodayPassword");
   const legacyTodayPasswordCard = legacyTodayPassword && legacyTodayPassword.closest(".card");
   if (legacyTodayPasswordCard) legacyTodayPasswordCard.remove();
