@@ -3,7 +3,7 @@ const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHom
 
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var sp=document.getElementById("staffPasswordOverlay");if(sp)sp.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
 $("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
 
 /* === ROUTER === */
@@ -1677,6 +1677,90 @@ async function openStaffPasswordChangeFlow() {
     handleDirectActionError(error, "パスワード変更に失敗しました");
   }
 }
+
+function closeStaffPasswordChangeFlow() {
+  const overlay = document.getElementById("staffPasswordOverlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+let _staffPasswordOverlayBound = false;
+function setupStaffPasswordOverlay() {
+  if (_staffPasswordOverlayBound) return;
+  const overlay = document.getElementById("staffPasswordOverlay");
+  const closeBtn = document.getElementById("staffPasswordClose");
+  const submitBtn = document.getElementById("staffPasswordSubmit");
+  const currentEl = document.getElementById("staffPasswordCurrent");
+  const nextEl = document.getElementById("staffPasswordNext");
+  const confirmEl = document.getElementById("staffPasswordConfirm");
+  const statusEl = document.getElementById("staffPasswordStatus");
+  if (!overlay || !closeBtn || !submitBtn || !currentEl || !nextEl || !confirmEl || !statusEl) return;
+
+  const setStatus = (message, color) => {
+    statusEl.textContent = message || "";
+    statusEl.style.color = color || "var(--muted)";
+  };
+
+  openStaffPasswordChangeFlow = async function() {
+    currentEl.value = "";
+    nextEl.value = "";
+    confirmEl.value = "";
+    setStatus("", "var(--muted)");
+    overlay.style.display = "flex";
+    currentEl.focus();
+  };
+
+  const submit = async () => {
+    const currentPw = currentEl.value;
+    const newPw = nextEl.value;
+    const confirmPw = confirmEl.value;
+
+    if (!String(currentPw).trim()) {
+      setStatus("現在のパスワードを入力してください。", "#ff4757");
+      currentEl.focus();
+      return;
+    }
+    if (!String(newPw).trim()) {
+      setStatus("新しいパスワードを入力してください。", "#ff4757");
+      nextEl.focus();
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setStatus("確認用パスワードが一致していません。", "#ff4757");
+      confirmEl.focus();
+      return;
+    }
+
+    submitBtn.disabled = true;
+    setStatus("更新しています...", "#4d96ff");
+    try {
+      await changeOwnStaffPasswordRemote(currentPw, newPw);
+      closeStaffPasswordChangeFlow();
+      showModal({ title: "変更しました", sub: "次回ログインから新しいパスワードを使えます", big: "OK" });
+    } catch (error) {
+      if (String(error && error.message || "") === "password_change_requires_gas_update") {
+        setStatus("GAS 側の更新が必要です。", "#ff4757");
+      } else {
+        setStatus("パスワード変更に失敗しました。", "#ff4757");
+        handleDirectActionError(error, "パスワード変更に失敗しました");
+      }
+    } finally {
+      submitBtn.disabled = false;
+    }
+  };
+
+  closeBtn.addEventListener("click", closeStaffPasswordChangeFlow);
+  overlay.addEventListener("click", event => {
+    if (event.target === overlay) closeStaffPasswordChangeFlow();
+  });
+  submitBtn.addEventListener("click", submit);
+  [currentEl, nextEl, confirmEl].forEach(input => {
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") submit();
+    });
+  });
+  _staffPasswordOverlayBound = true;
+}
+setupStaffPasswordOverlay();
 
 function hideStaffDuplicateButtons(sectionId) {
   const hideIdsBySection = {

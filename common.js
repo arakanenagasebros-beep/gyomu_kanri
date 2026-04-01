@@ -326,116 +326,20 @@ function downloadTaskFiles(task) {
   task.fileNames.forEach(fn => showModal({ title: "ダウンロード", sub: fn, big: "📥" }));
 }
 
-async function syncPull() {
-  if (!API_URL || _isSyncing) return false;
-  await waitForQueueIdle();
-  _isSyncing = true;
-  try {
-    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
-    const result = await resp.json();
-    if (result.ok && result.data) {
-      const remoteVer = result.data._version || 0;
-      if (remoteVer > _syncVersion) {
-        _syncVersion = remoteVer;
-        const clean = sanitizeRemoteData(result.data);
-        localStorage.setItem(LS_KEY, JSON.stringify(clean));
-        data = JSON.parse(JSON.stringify(clean));
-        lastSyncedDataStr = JSON.stringify(serializeDataForSync(clean));
-        migrateData();
-        _lastSyncTime = Date.now();
-        updateSyncUI("ok", "同期済み ✓");
-        return true;
-      }
-      _lastSyncTime = Date.now();
-      updateSyncUI("ok", "最新 ✓");
-      return false;
-    }
-    updateSyncUI("err", "読込エラー");
-    return false;
-  } catch (e) {
-    updateSyncUI("err", "通信エラー");
-    return false;
-  } finally {
-    _isSyncing = false;
-  }
+async function syncPullLegacy() {
+  return syncPull();
 }
 
-function saveData(d) {
-  if (skipNextSaveDataSync) {
-    skipNextSaveDataSync = false;
-    saveLocalAsSynced(d);
-    return;
-  }
-  saveLocalOnly(d);
-  const oldD = JSON.parse(lastSyncedDataStr || "{}");
-  const newD = serializeDataForSync(d);
-
-  const oldTasksById = new Map((oldD.tasks || []).map(t => [t.id, t]));
-  const newTasksById = new Map((newD.tasks || []).map(t => [t.id, t]));
-  newTasksById.forEach((nT, id) => {
-    const oT = oldTasksById.get(id);
-    if (!oT || JSON.stringify(oT) !== JSON.stringify(nT)) {
-      queueAction("updateTask", { task: nT, isDelete: false });
-    }
-  });
-  oldTasksById.forEach((oT, id) => {
-    if (!newTasksById.has(id)) {
-      queueAction("updateTask", { task: { id: oT.id }, isDelete: true });
-    }
-  });
-
-  const oldUsers = oldD.users || {};
-  const newUsers = newD.users || {};
-  Object.keys(newUsers).forEach(uid => {
-    if (JSON.stringify(oldUsers[uid]) !== JSON.stringify(newUsers[uid])) {
-      queueAction("updateUserFull", { targetUserId: uid, userObj: newUsers[uid] });
-    }
-  });
-
-  let masterChanged = false;
-  let deletedUids = [];
-  if (JSON.stringify(oldD.taskTypes) !== JSON.stringify(newD.taskTypes)) masterChanged = true;
-  if (JSON.stringify(oldD.taskPrices) !== JSON.stringify(newD.taskPrices)) masterChanged = true;
-  if (JSON.stringify(oldD.employees) !== JSON.stringify(newD.employees)) masterChanged = true;
-  if (JSON.stringify(oldD.userHourlyRates) !== JSON.stringify(newD.userHourlyRates)) masterChanged = true;
-  if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) masterChanged = true;
-  if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) masterChanged = true;
-  Object.keys(oldUsers).forEach(uid => {
-    if (!newUsers[uid]) {
-      masterChanged = true;
-      deletedUids.push(uid);
-    }
-  });
-
-  if (masterChanged) {
-    queueAction("updateMaster", {
-      taskTypes: newD.taskTypes,
-      taskPrices: newD.taskPrices,
-      employees: newD.employees,
-      userHourlyRates: newD.userHourlyRates,
-      staffWorkStatus: newD.staffWorkStatus,
-      lockedMonths: newD.lockedMonths,
-      deleteUserId: deletedUids
-    });
-  }
-
-  lastSyncedDataStr = JSON.stringify(newD);
+function saveDataLegacy(d) {
+  return saveData(d);
 }
 
 // ==========================================
 // ▲▲▲ スマート同期システムここまで ▲▲▲
 // ==========================================
 
-async function syncCheckVersion() {
-  if (!API_URL || _isSyncing) return;
-  try {
-    const resp = await fetch(API_URL + "?action=version&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
-    const result = await resp.json();
-    if (result.ok && (result.version || 0) > _syncVersion) {
-      await syncPull();
-    }
-  } catch (e) {
-  }
+async function syncCheckVersionLegacy() {
+  return syncCheckVersion();
 }
 
 function startSyncPolling() {
@@ -447,32 +351,8 @@ function stopSyncPolling() {
 }
 
 // 強制同期: 重要な画面遷移前に最新データを取得
-async function forceSyncPull() {
-  if (!API_URL) return false;
-  await waitForQueueIdle();
-  // _isSyncingチェックをスキップして強制的にpull
-  const wasSyncing = _isSyncing;
-  _isSyncing = true;
-  try {
-    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
-    const result = await resp.json();
-    if (result.ok && result.data) {
-      _syncVersion = result.data._version || 0;
-      const clean = sanitizeRemoteData(result.data);
-      localStorage.setItem(LS_KEY, JSON.stringify(clean));
-      data = JSON.parse(JSON.stringify(clean));
-      lastSyncedDataStr = JSON.stringify(serializeDataForSync(clean));
-      migrateData();
-      _lastSyncTime = Date.now();
-      updateSyncUI("ok", "同期済み ✓");
-      return true;
-    }
-    return false;
-  } catch (e) {
-    return false;
-  } finally {
-    _isSyncing = wasSyncing;
-  }
+async function forceSyncPullLegacy() {
+  return forceSyncPull();
 }
 
 if (actionQueue.length && getToken()) setTimeout(processQueue, 0);
