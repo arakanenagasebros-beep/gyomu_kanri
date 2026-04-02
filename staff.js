@@ -123,8 +123,36 @@ $("uThis").addEventListener("click",()=>{userMonthCursor=startOfMonth(new Date()
 let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
+const STAMP_EDIT_DRAFT_KEY_PREFIX = "stampcard_stamp_edit_draft_v1:";
+function getStampEditDraftKey(userId){return `${STAMP_EDIT_DRAFT_KEY_PREFIX}${String(userId||"")}`;}
+function loadStampEditDraft(userId){
+  try{
+    const raw=localStorage.getItem(getStampEditDraftKey(userId));
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    return {
+      stamps:parsed&&parsed.stamps&&typeof parsed.stamps==="object"?parsed.stamps:{},
+      emergencyMode:!!(parsed&&parsed.emergencyMode)
+    };
+  }catch(e){return null}
+}
+function saveStampEditDraft(userId){
+  if(!userId)return;
+  localStorage.setItem(getStampEditDraftKey(userId),JSON.stringify({
+    stamps:JSON.parse(JSON.stringify(stampEditStamps||{})),
+    emergencyMode:!!stampEditEmergencyMode
+  }));
+}
+function clearStampEditDraft(userId){
+  if(!userId)return;
+  localStorage.removeItem(getStampEditDraftKey(userId));
+}
 function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}ensureUserShape(u)
 u.stamps = u.stamps || {};
+if(u.pendingStampRequest){clearStampEditDraft(u.id)}else if(!stampEditMode){
+  const draft=loadStampEditDraft(u.id);
+  if(draft){stampEditMode=true;stampEditStamps=JSON.parse(JSON.stringify(draft.stamps||u.stamps));stampEditEmergencyMode=!!draft.emergencyMode;}
+}
 $("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
@@ -153,11 +181,11 @@ if(u.userType==="学生"){
   } else if(stampEditMode){
     const cancelBtn=document.createElement("button");cancelBtn.className="btn ghost";cancelBtn.style.cssText="width:100%;margin-top:12px;font-size:13px;padding:10px;";
     cancelBtn.textContent="✕ 修正モードを終了";
-    cancelBtn.addEventListener("click",()=>{stampEditMode=false;stampEditStamps={};stampEditEmergencyMode=false;renderUserHome()});
+    cancelBtn.addEventListener("click",()=>{clearStampEditDraft(u.id);stampEditMode=false;stampEditStamps={};stampEditEmergencyMode=false;renderUserHome()});
     sra.appendChild(cancelBtn);
   } else {
     const reqBtn=document.createElement("button");reqBtn.className="btn stamp-request-btn";reqBtn.textContent="📝 スタンプ修正申請";
-    reqBtn.addEventListener("click",()=>{stampEditMode=true;stampEditEmergencyMode=false;stampEditStamps=JSON.parse(JSON.stringify(u.stamps));renderUserHome()});
+    reqBtn.addEventListener("click",()=>{const draft=loadStampEditDraft(u.id);stampEditMode=true;stampEditEmergencyMode=draft?!!draft.emergencyMode:false;stampEditStamps=JSON.parse(JSON.stringify(draft&&draft.stamps?draft.stamps:u.stamps));saveStampEditDraft(u.id);renderUserHome()});
     sra.appendChild(reqBtn);
   }
 }
@@ -172,7 +200,7 @@ if(stampEditMode){
       } else {
         if(!cur)stampEditStamps[k]=true;else if(cur===true)delete stampEditStamps[k];else if(cur==="emergency")delete stampEditStamps[k];
       }
-      renderUserHome()},
+      saveStampEditDraft(u.id);renderUserHome()},
     pendingChanges:stampEditStamps,originalStamps:u.stamps});
   const bar=$("stampApplyBar");bar.classList.remove("hidden");bar.innerHTML="";
   bar.className="stamp-apply-bar";bar.style.flexWrap="wrap";
@@ -183,15 +211,15 @@ if(stampEditMode){
   // Mode toggle
   const modeDiv=document.createElement("div");modeDiv.style.cssText="display:flex;gap:6px;align-items:center;flex:1;";
   const normalBtn=document.createElement("button");normalBtn.className="btn small"+(stampEditEmergencyMode?"":" primary");normalBtn.textContent="✓ 通常";
-  normalBtn.addEventListener("click",()=>{stampEditEmergencyMode=false;renderUserHome()});
+  normalBtn.addEventListener("click",()=>{stampEditEmergencyMode=false;saveStampEditDraft(u.id);renderUserHome()});
   const emgBtn=document.createElement("button");emgBtn.className="btn small"+(stampEditEmergencyMode?" primary":"");emgBtn.style.cssText=stampEditEmergencyMode?"background:linear-gradient(135deg,#ff9a56,#ffd93d);border-color:rgba(255,154,86,.3);color:#fff;":"";
   emgBtn.textContent="⚡ 緊急出勤";
-  emgBtn.addEventListener("click",()=>{stampEditEmergencyMode=true;renderUserHome()});
+  emgBtn.addEventListener("click",()=>{stampEditEmergencyMode=true;saveStampEditDraft(u.id);renderUserHome()});
   modeDiv.appendChild(normalBtn);modeDiv.appendChild(emgBtn);bar.appendChild(modeDiv);
   const applyBtn=document.createElement("button");applyBtn.className="btn primary small";applyBtn.textContent="📨 申請する";
   applyBtn.addEventListener("click",()=>{
     u.pendingStampRequest={stamps:JSON.parse(JSON.stringify(stampEditStamps)),status:"pending",createdAt:Date.now()};
-    saveData(data);stampEditMode=false;stampEditStamps={};stampEditEmergencyMode=false;
+    clearStampEditDraft(u.id);saveData(data);stampEditMode=false;stampEditStamps={};stampEditEmergencyMode=false;
     showModal({title:"申請完了",sub:"管理者の承認をお待ちください",big:"📨"});renderUserHome()});
   bar.appendChild(applyBtn);
 } else {
@@ -1930,6 +1958,7 @@ renderUserHome = function() {
         clone.addEventListener("click", () => {
           requestStampCorrectionRemote(u.id, stampEditStamps)
             .then(() => {
+              clearStampEditDraft(u.id);
               stampEditMode = false;
               stampEditStamps = {};
               stampEditEmergencyMode = false;
