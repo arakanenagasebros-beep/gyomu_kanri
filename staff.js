@@ -627,7 +627,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     return { cls: "dayState", text: "" };
   }
 
-  const rebuild = state.monthKey !== monthKey || !state.cells;
+  const rebuild = state.monthKey !== monthKey || !state.cells || state.clickable !== !!clickable || state.pendingEnabled !== !!pendingChanges || state.originalEnabled !== !!originalStamps;
   if (rebuild) {
     mount.innerHTML = "";
     const frag = document.createDocumentFragment();
@@ -680,7 +680,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       cells[key] = { cell, stampEl: st, markerEl: marker, dayDate: new Date(d) };
     }
     mount.appendChild(frag);
-    mount._calendarState = { monthKey, cells };
+    mount._calendarState = { monthKey, cells, clickable: !!clickable, pendingEnabled: !!pendingChanges, originalEnabled: !!originalStamps };
     return;
   }
 
@@ -2144,6 +2144,34 @@ function bindLatestStampRequestUi(user) {
   if (!u) return;
 
   const stampRequestArea = $("stampRequestArea");
+  if (stampRequestArea && u.pendingStampRequest && u.pendingStampRequest.status === "pending") {
+    const hasCancelBtn = !!stampRequestArea.querySelector("[data-action='cancel-stamp-request']");
+    if (!hasCancelBtn) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn ghost";
+      cancelBtn.dataset.action = "cancel-stamp-request";
+      cancelBtn.style.cssText = "width:100%;margin-top:10px;font-size:13px;padding:10px;";
+      cancelBtn.textContent = "申請を取り消す";
+      stampRequestArea.appendChild(cancelBtn);
+    }
+    const cancelBtn = stampRequestArea.querySelector("[data-action='cancel-stamp-request']");
+    if (cancelBtn && cancelBtn.parentNode) {
+      const clone = cancelBtn.cloneNode(true);
+      cancelBtn.parentNode.replaceChild(clone, cancelBtn);
+      clone.addEventListener("click", () => {
+        if (!confirm("このスタンプ修正申請を取り消しますか？")) return;
+        clearStampEditDraft(u.id);
+        clearStampRequestStateRemote(u.id)
+          .then(() => {
+            stampEditMode = false;
+            stampEditStamps = {};
+            stampEditEmergencyMode = false;
+            renderUserHome();
+          })
+          .catch(error => handleDirectActionError(error, "申請の取り消しに失敗しました"));
+      });
+    }
+  }
   if (stampRequestArea && u.pendingStampRequest && (u.pendingStampRequest.status === "approved" || u.pendingStampRequest.status === "rejected")) {
     const dismissBtn = stampRequestArea.querySelector("button");
     if (dismissBtn && dismissBtn.parentNode) {

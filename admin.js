@@ -739,7 +739,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     return { cls: "dayState", text: "" };
   }
 
-  const rebuild = state.monthKey !== monthKey || !state.cells;
+  const rebuild = state.monthKey !== monthKey || !state.cells || state.clickable !== !!clickable || state.pendingEnabled !== !!pendingChanges || state.originalEnabled !== !!originalStamps;
   if (rebuild) {
     mount.innerHTML = "";
     const frag = document.createDocumentFragment();
@@ -792,7 +792,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       cells[key] = { cell, stampEl: st, markerEl: marker, dayDate: new Date(d) };
     }
     mount.appendChild(frag);
-    mount._calendarState = { monthKey, cells };
+    mount._calendarState = { monthKey, cells, clickable: !!clickable, pendingEnabled: !!pendingChanges, originalEnabled: !!originalStamps };
     return;
   }
 
