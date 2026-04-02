@@ -18,8 +18,8 @@ localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }
-function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); setTimeout(processQueue, 0); }
-function clearToken(){ sessionStorage.removeItem(TOKEN_KEY); }
+function setToken(t){ sessionStorage.setItem(TOKEN_KEY, t); invalidateStaffAccountsCache(); setTimeout(processQueue, 0); }
+function clearToken(){ sessionStorage.removeItem(TOKEN_KEY); invalidateStaffAccountsCache(); }
 
 async function downloadDriveFile(fileId, fileName, taskId){
   if(!API_URL) { showModal({title:"API未接続です（⚙で設定）",big:"⚠️"}); return; }
@@ -148,9 +148,23 @@ let actionQueue = loadPersistedActionQueue();
 let isSending = false;
 let skipNextSaveDataSync = false;
 let needsQueueRebuild = false;
+let _staffAccountsCache = null;
+
+function stripSensitiveFieldsFromData(clean) {
+  const users = (clean && clean.users) || {};
+  Object.keys(users).forEach(uid => {
+    const user = users[uid];
+    if (user && Object.prototype.hasOwnProperty.call(user, "pw")) delete user.pw;
+  });
+  return clean;
+}
+
+function cloneForStorage(src) {
+  return stripSensitiveFieldsFromData(JSON.parse(JSON.stringify(src || {})));
+}
 
 function serializeDataForSync(src) {
-  const clean = JSON.parse(JSON.stringify(src || {}));
+  const clean = cloneForStorage(src);
   delete clean.session;
   delete clean._version;
   delete clean._updatedAt;
@@ -184,18 +198,34 @@ function syncMetaFromResult(result) {
   return { version: result.version, updatedAt: result.updatedAt };
 }
 
-function saveLocalOnly(d) {
-  localStorage.setItem(LS_KEY, JSON.stringify(d));
-}
-
-function saveLocalAsSynced(d, syncMeta) {
-  saveLocalOnly(d);
-  persistSyncedBaseline(JSON.stringify(serializeDataForSync(d)));
+function applySyncMeta(syncMeta) {
   if (syncMeta && syncMeta.version != null) {
     _syncVersion = parseInt(syncMeta.version, 10) || 0;
     persistSyncVersion();
   }
   if (syncMeta && syncMeta.updatedAt) _lastSyncTime = Date.parse(syncMeta.updatedAt) || Date.now();
+}
+
+function updateSyncedBaseline(mutator, syncMeta) {
+  let baseline;
+  try {
+    baseline = JSON.parse(lastSyncedDataStr || "{}");
+  } catch (e) {
+    baseline = {};
+  }
+  mutator(baseline);
+  persistSyncedBaseline(JSON.stringify(serializeDataForSync(baseline)));
+  applySyncMeta(syncMeta);
+}
+
+function saveLocalOnly(d) {
+  localStorage.setItem(LS_KEY, JSON.stringify(cloneForStorage(d)));
+}
+
+function saveLocalAsSynced(d, syncMeta) {
+  saveLocalOnly(d);
+  persistSyncedBaseline(JSON.stringify(serializeDataForSync(d)));
+  applySyncMeta(syncMeta);
 }
 
 if (!lastSyncedDataStr) {
@@ -480,6 +510,9 @@ async function processQueue() {
       persistSyncVersion();
       _lastSyncTime = Date.now();
       updateSyncUI("ok", "同期済み");
+      if (actionQueue.length === 0 && !needsQueueRebuild) {
+        saveLocalAsSynced(data, syncMetaFromResult(result));
+      }
     } else if (result.error === "version_conflict") {
       await handleQueueVersionConflict();
     } else {
@@ -565,6 +598,7 @@ function saveData(d) {
   if (JSON.stringify(oldD.userHourlyRates) !== JSON.stringify(newD.userHourlyRates)) nextQueue.push({ action: "updateMaster", payload: { userHourlyRates: newD.userHourlyRates }, retryCount: 0, nextAttemptAt: 0 });
   if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) nextQueue.push({ action: "updateMaster", payload: { staffWorkStatus: newD.staffWorkStatus }, retryCount: 0, nextAttemptAt: 0 });
   if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) nextQueue.push({ action: "updateMaster", payload: { lockedMonths: newD.lockedMonths }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.notices) !== JSON.stringify(newD.notices)) nextQueue.push({ action: "updateMaster", payload: { notices: newD.notices }, retryCount: 0, nextAttemptAt: 0 });
 
   const deletedUids = Object.keys(oldUsers).filter(uid => !newUsers[uid]);
   if (deletedUids.length) nextQueue.push({ action: "updateMaster", payload: { deleteUserId: deletedUids }, retryCount: 0, nextAttemptAt: 0 });
@@ -666,7 +700,51 @@ function findLocalReportIndex(user, reportId, fallbackIndex) {
 function applyDirectUserSync(userId, nextUser, result) {
   data.users = data.users || {};
   data.users[userId] = cloneDeep(nextUser);
-  saveLocalAsSynced(data, syncMetaFromResult(result));
+  saveLocalOnly(data);
+  updateSyncedBaseline(baseline => {
+    baseline.users = baseline.users || {};
+    baseline.users[userId] = cloneDeep(nextUser);
+  }, syncMetaFromResult(result));
+}
+
+async function fetchStaffAccountsForAdmin(forceRefresh = false) {
+  if (!API_URL) throw new Error("API not configured");
+  const token = getToken();
+  if (!token) throw new Error("not logged in");
+  if (!forceRefresh && Array.isArray(_staffAccountsCache)) return cloneDeep(_staffAccountsCache);
+  const resp = await fetch(API_URL + "?action=listStaffAccounts&token=" + encodeURIComponent(token), { redirect: "follow" });
+  const result = await resp.json();
+  if (!result || !result.ok || !Array.isArray(result.staffAccounts)) {
+    throw new Error((result && result.error) || "staff_accounts_fetch_failed");
+  }
+  _staffAccountsCache = result.staffAccounts.map(acc => Object.assign({}, acc));
+  return cloneDeep(_staffAccountsCache);
+}
+
+function invalidateStaffAccountsCache() {
+  _staffAccountsCache = null;
+}
+
+async function fetchStaffPasswordForAdmin(userId, forceRefresh = false) {
+  const accounts = await fetchStaffAccountsForAdmin(forceRefresh);
+  const found = accounts.find(acc => String(acc.id || "") === String(userId || ""));
+  return found ? String(found.pw || "") : "";
+}
+
+function fillStaffPasswordField(fieldId, userId, forceRefresh = false) {
+  const input = document.getElementById(fieldId);
+  if (!input) return;
+  input.value = "";
+  if (!userId) return;
+  fetchStaffPasswordForAdmin(userId, forceRefresh)
+    .then(pw => {
+      if (document.getElementById(fieldId) !== input) return;
+      input.value = pw || "";
+    })
+    .catch(() => {
+      if (document.getElementById(fieldId) !== input) return;
+      input.value = "";
+    });
 }
 
 function isUnsupportedDirectActionError(error) {

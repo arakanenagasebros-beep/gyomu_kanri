@@ -70,6 +70,7 @@ async function bootstrapDefaultStaffIfNeeded(){
             redirect: "follow"
           });
           const result = await resp.json();
+          applySyncMeta(syncMetaFromResult(result));
           if (!result.ok) throw new Error(result.error || "bootstrap failed");
           created.push(staff.id);
         } catch (error) {
@@ -84,7 +85,6 @@ async function bootstrapDefaultStaffIfNeeded(){
           id: staff.id,
           name: staff.name,
           userType: staff.userType,
-          pw: staff.pw,
           createdAt: (data.users[staff.id] && data.users[staff.id].createdAt) || (Date.now() + index)
         });
         data.userHourlyRates[staff.id] = 1300;
@@ -120,7 +120,7 @@ try{
   data.session.userId=result.user.id;
   data.users=data.users||{};
   data.users[result.user.id]=Object.assign({},data.users[result.user.id]||{},{name:result.user.name,userType:result.user.userType});
-  saveData(data);
+  saveLocalOnly(data);
   userMonthCursor=startOfMonth(new Date());
   syncPull().then(changed=>{
     if(!changed || data.session.userId!==result.user.id) return;
@@ -130,7 +130,7 @@ try{
   if(result.user.userType==="社会人"){location.hash="#report-confirm";}else{
     const today=ymd(new Date());
     const visited=data.users[result.user.id].stampScreenVisitedToday===today;
-    if(!visited){data.users[result.user.id].stampScreenVisitedToday=today;saveData(data)}
+    if(!visited){data.users[result.user.id].stampScreenVisitedToday=today;saveLocalOnly(data)}
     location.hash="#user-stamp";
   }
 }catch(e){$("userAuthErr").textContent="通信エラー";$("userAuthErr").style.display="block";}
@@ -145,7 +145,7 @@ try{
   setToken(result.token);
   data.session.adminAuthed=true;
   data.session.adminEditingUserId="";
-  saveData(data);
+  saveLocalOnly(data);
   syncPull().then(changed=>{
     if(changed && location.hash==="#admin-task-list" && data.session.adminAuthed) renderAdminTaskList();
   });
@@ -449,12 +449,14 @@ if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してくだ
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
   const r=await resp.json();
+  applySyncMeta(syncMetaFromResult(r));
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
 // ローカルデータにも PW を保持して、編集オーバーレイから確認できるようにする
   data.users=data.users||{};
   const existing = data.users[id] || {};
-  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype, pw:pw});
-  saveData(data);
+  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
+  invalidateStaffAccountsCache();
+  saveLocalOnly(data);
   $("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
   showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
 }catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}
@@ -612,6 +614,7 @@ $("btnSaveUserInfo").addEventListener("click", async ()=>{
     redirect: "follow"
   });
   const r = await resp.json();
+  applySyncMeta(syncMetaFromResult(r));
   if (!r.ok) {
     showModal({title: "エラー", sub: r.error, big: "🚫"});
     return;
@@ -630,6 +633,7 @@ $("btnSaveUserInfo").addEventListener("click", async ()=>{
       redirect: "follow"
     });
     const delResult = await delResp.json();
+    applySyncMeta(syncMetaFromResult(delResult));
     if (!delResult.ok) {
       showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
       return;
@@ -641,7 +645,6 @@ $("btnSaveUserInfo").addEventListener("click", async ()=>{
 }
 
 u.name=nn||nid;
-if(np)u.pw=np;
 u.userType=nt;
 if(nid!==oldId){
   u.id=nid;
@@ -661,6 +664,7 @@ showModal({title:"更新完了",big:"✅"});
 });
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
+fillStaffPasswordField("editUpw", u.id);
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -993,7 +997,7 @@ function renderFileList(){
     const rm=document.createElement("span");rm.className="file-remove";rm.textContent="✕";
     rm.addEventListener("click",()=>{
       const existCount=(fileUploadTask.fileNames||[]).length;
-      if(i<existCount){fileUploadTask.fileNames.splice(i,1);saveData(data)}
+      if(i<existCount){fileUploadTask.fileNames.splice(i,1);if(fileUploadTask.fileIds&&fileUploadTask.fileIds.length>i)fileUploadTask.fileIds.splice(i,1);saveData(data)}
       else{pendingFiles.splice(i-existCount,1)}
       renderFileList();
     });
@@ -1022,7 +1026,7 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
     var f=pendingFiles[i];
     if(!fileUploadTask.fileNames)fileUploadTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f);
+      var result=await uploadFileToDrive(f, fileUploadTask.id);
       if(result){fileUploadTask.fileNames.push(result.fileName);if(!fileUploadTask.fileIds)fileUploadTask.fileIds=[];fileUploadTask.fileIds.push(result.fileId);}
       else{fileUploadTask.fileNames.push(f.name+"(アップロード失敗)");}
     }else{fileUploadTask.fileNames.push(f.name);}
@@ -1052,7 +1056,7 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
     var f=pendingFiles[i];
     if(!baseTask.fileNames)baseTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f);
+      var result=await uploadFileToDrive(f, baseTask.id);
       if(result){baseTask.fileNames.push(result.fileName);if(!baseTask.fileIds)baseTask.fileIds=[];baseTask.fileIds.push(result.fileId);}
       else{baseTask.fileNames.push(f.name);}
     }else{baseTask.fileNames.push(f.name);}
@@ -1162,6 +1166,240 @@ $("taskAddSave").addEventListener("click",()=>{
   }
   if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList()});
 $("atlAddTask").addEventListener("click",openTaskAdd);
+
+function getTaskImportHeaders() {
+  return [
+    { key: "workType", label: "業務形態(workType)" },
+    { key: "status", label: "状態(status)" },
+    { key: "requestDate", label: "依頼日(requestDate)" },
+    { key: "deadline", label: "期限(deadline)" },
+    { key: "completionDate", label: "完了日(completionDate)" },
+    { key: "manHours", label: "工数(manHours)" },
+    { key: "taskType", label: "業務種類(taskType)" },
+    { key: "employee", label: "担当社員(employee)" },
+    { key: "staff", label: "担当スタッフ(staff)" },
+    { key: "textCodes", label: "テキストコード(textCodes)" },
+    { key: "content", label: "内容(content)" },
+    { key: "notes", label: "備考(notes)" }
+  ];
+}
+
+function getTaskImportDefaults() {
+  const workTypeSel = $("taWorkType");
+  const statusSel = $("taStatus");
+  return {
+    workType: workTypeSel && workTypeSel.value ? workTypeSel.value : "制作",
+    status: statusSel && statusSel.value ? statusSel.value : "依頼中",
+    requestDate: ymd(new Date()),
+    deadline: ymd(addDays(new Date(), 7)),
+    completionDate: "",
+    manHours: "1",
+    taskType: (getTaskTypes()[0] || ""),
+    employee: (getEmployees()[0] || ""),
+    staff: "未指定",
+    textCodes: "",
+    content: "内容を入力",
+    notes: ""
+  };
+}
+
+function escapeTaskImportHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;");
+}
+
+function buildTaskImportTemplateHtml() {
+  const headers = getTaskImportHeaders();
+  const sample = getTaskImportDefaults();
+  const statusValues = Array.from(($("taStatus") && $("taStatus").options) || []).map(o => o.value).filter(Boolean);
+  const workTypeValues = Array.from(($("taWorkType") && $("taWorkType").options) || []).map(o => o.value).filter(Boolean);
+  const employeeValues = getEmployees();
+  const staffValues = ["未指定"].concat(getStaffUsers().map(getUserDisplayName));
+
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>業務追加テンプレート</title>
+</head>
+<body>
+<table border="1" data-template="task-import">
+  <thead>
+    <tr>${headers.map(h => `<th>${escapeTaskImportHtml(h.label)}</th>`).join("")}</tr>
+  </thead>
+  <tbody>
+    <tr>${headers.map(h => `<td>${escapeTaskImportHtml(sample[h.key] || "")}</td>`).join("")}</tr>
+  </tbody>
+</table>
+<br>
+<table border="1">
+  <tbody>
+    <tr><th>使い方</th><td>1行につき1件です。不要な行は削除してください。</td></tr>
+    <tr><th>業務形態</th><td>${escapeTaskImportHtml(workTypeValues.join(" / "))}</td></tr>
+    <tr><th>状態</th><td>${escapeTaskImportHtml(statusValues.join(" / "))}</td></tr>
+    <tr><th>担当社員</th><td>${escapeTaskImportHtml(employeeValues.join(" / "))}</td></tr>
+    <tr><th>担当スタッフ</th><td>${escapeTaskImportHtml(staffValues.join(" / "))}</td></tr>
+    <tr><th>テキストコード</th><td>複数ある場合はカンマ区切りで入力してください</td></tr>
+  </tbody>
+</table>
+</body>
+</html>`;
+}
+
+function downloadTaskImportTemplate() {
+  const html = buildTaskImportTemplateHtml();
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "業務追加テンプレート.xls";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function normalizeTaskImportHeader(header) {
+  const raw = String(header || "").trim();
+  const match = raw.match(/\(([^)]+)\)/);
+  return (match ? match[1] : raw).trim();
+}
+
+function parseDelimitedTaskImport(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n").filter(line => line.trim() !== "");
+  if (!lines.length) return [];
+  const separator = lines[0].includes("\t") ? "\t" : ",";
+  return lines.map(line => {
+    const row = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (ch === "\"") {
+        if (inQuotes && line[i + 1] === "\"") {
+          current += "\"";
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === separator && !inQuotes) {
+        row.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    row.push(current);
+    return row.map(cell => cell.trim());
+  });
+}
+
+function parseTaskImportRows(text) {
+  const raw = String(text || "");
+  if (/<table/i.test(raw)) {
+    const doc = new DOMParser().parseFromString(raw, "text/html");
+    const table = doc.querySelector('table[data-template="task-import"]') || doc.querySelector("table");
+    if (!table) return [];
+    return Array.from(table.querySelectorAll("tr")).map(tr => Array.from(tr.children).map(cell => String(cell.textContent || "").trim()));
+  }
+  return parseDelimitedTaskImport(raw);
+}
+
+function convertImportRowsToTasks(rows) {
+  if (!rows.length) return [];
+  const headerMap = rows[0].map(normalizeTaskImportHeader);
+  const tasks = [];
+  const defaults = getTaskImportDefaults();
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    const record = {};
+    headerMap.forEach((key, idx) => { record[key] = String((row && row[idx]) || "").trim(); });
+    const hasAnyValue = Object.values(record).some(value => String(value || "").trim() !== "");
+    if (!hasAnyValue) continue;
+
+    const workType = record.workType || defaults.workType;
+    const task = {
+      id: Date.now() + i,
+      seqNum: nextSeqNum(workType),
+      workType,
+      status: record.status || defaults.status,
+      requestDate: record.requestDate || defaults.requestDate,
+      deadline: record.deadline || defaults.deadline,
+      completionDate: record.completionDate || "",
+      manHours: Math.max(1, parseInt(record.manHours, 10) || 1),
+      textCodes: (record.textCodes || "").split(",").map(v => v.trim()).filter(Boolean),
+      taskType: record.taskType || defaults.taskType,
+      content: record.content || "",
+      employee: record.employee || defaults.employee,
+      staff: defaults.staff,
+      notes: record.notes || "",
+      validPointCount: 0,
+      fileNames: [],
+      fileIds: []
+    };
+    setTaskStaffRef(task, record.staff || defaults.staff);
+    tasks.push(task);
+    data.tasks.push(task);
+  }
+  return tasks;
+}
+
+async function importTasksFromFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  const rows = parseTaskImportRows(text);
+  const imported = convertImportRowsToTasks(rows);
+  if (!imported.length) {
+    showModal({ title: "取込対象がありません", sub: "テンプレートの1行目は見出しです", big: "NG" });
+    return;
+  }
+  saveData(data);
+  renderAdminTaskList();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+}
+
+function ensureTaskImportControls() {
+  const addBtn = $("atlAddTask");
+  if (!addBtn || !addBtn.parentNode) return;
+  if (!document.getElementById("atlDownloadTemplate")) {
+    const templateBtn = document.createElement("button");
+    templateBtn.id = "atlDownloadTemplate";
+    templateBtn.className = "btn ghost small";
+    templateBtn.textContent = "テンプレート";
+    templateBtn.addEventListener("click", downloadTaskImportTemplate);
+    addBtn.parentNode.insertBefore(templateBtn, addBtn);
+  }
+  if (!document.getElementById("atlImportExcel")) {
+    const importBtn = document.createElement("button");
+    importBtn.id = "atlImportExcel";
+    importBtn.className = "btn small";
+    importBtn.textContent = "Excel取込";
+    importBtn.addEventListener("click", () => {
+      const input = document.getElementById("atlImportFile");
+      if (input) {
+        input.value = "";
+        input.click();
+      }
+    });
+    addBtn.parentNode.insertBefore(importBtn, addBtn);
+  }
+  if (!document.getElementById("atlImportFile")) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "atlImportFile";
+    input.accept = ".xls,.csv,.tsv,.txt";
+    input.style.display = "none";
+    input.addEventListener("change", event => {
+      const file = event.target && event.target.files && event.target.files[0];
+      importTasksFromFile(file).catch(error => handleDirectActionError(error, "Excel取込に失敗しました"));
+    });
+    addBtn.parentNode.appendChild(input);
+  }
+}
 
 /* === STAFF TASK LIST === */
 let stlInit=false;
@@ -1299,6 +1537,7 @@ dBtn.addEventListener("click", async ()=>{
       redirect: "follow"
     });
     const r = await resp.json();
+    applySyncMeta(syncMetaFromResult(r));
     if(!r.ok){
       showModal({title:"削除失敗",sub:r.error||"エラー",big:"🚫"});
       return;
@@ -1351,10 +1590,11 @@ async function openStaffEdit(userId) {
   const u = data.users[userId]; if (!u) return;
   setStaffEditOverlayTitle("スタッフ情報編集");
   $("seId").value = u.id;
-  $("sePw").value = u.pw || "";
+  $("sePw").value = "";
   $("seName").value = u.name || "";
   $("seType").value = u.userType || "学生";
   $("seRate").value = String(getUserHourlyRate(u.id));
+  try { $("sePw").value = await fetchStaffPasswordForAdmin(u.id, true); } catch (_error) {}
   $("staffEditOverlay").style.display = "flex";
 }
 $("staffEditClose").addEventListener("click", () => { $("staffEditOverlay").style.display = "none"; });
@@ -1389,6 +1629,7 @@ $("staffEditSave").addEventListener("click", async () => {
     redirect: "follow"
   });
   const r = await resp.json();
+  applySyncMeta(syncMetaFromResult(r));
   if (!r.ok) {
     showModal({title: "エラー", sub: r.error, big: "🚫"});
     return;
@@ -1407,6 +1648,7 @@ $("staffEditSave").addEventListener("click", async () => {
       redirect: "follow"
     });
     const delResult = await delResp.json();
+    applySyncMeta(syncMetaFromResult(delResult));
     if (!delResult.ok) {
       showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
       return;
@@ -1419,7 +1661,6 @@ $("staffEditSave").addEventListener("click", async () => {
 
 // Update fields
 u.name = newName || newId;
-if(newPw)u.pw = newPw;
 u.userType = newType;
 
 // Update hourly rate
@@ -1487,10 +1728,13 @@ showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
         redirect: "follow"
       });
       const r = await resp.json();
-      if (!r.ok) {
-        showModal({title: "繧ｨ繝ｩ繝ｼ", sub: r.error, big: "圻"});
-        return;
-      }
+      applySyncMeta(syncMetaFromResult(r));
+  if (!r.ok) {
+    showModal({title: "繧ｨ繝ｩ繝ｼ", sub: r.error, big: "圻"});
+    return;
+  }
+  invalidateStaffAccountsCache();
+  invalidateStaffAccountsCache();
 
       if (!isCreate && newId !== oldId) {
         const delResp = await fetch(API_URL, {
@@ -1504,6 +1748,7 @@ showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
           redirect: "follow"
         });
         const delResult = await delResp.json();
+        applySyncMeta(syncMetaFromResult(delResult));
         if (!delResult.ok) {
           showModal({title: "譌ｧID蜑企勁螟ｱ謨・, sub: delResult.error || "繧ｨ繝ｩ繝ｼ", big: "圻"});
           return;
@@ -1518,7 +1763,6 @@ showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
     targetUser.id = newId;
     targetUser.name = newName || newId;
     targetUser.userType = newType;
-    targetUser.pw = newPw || targetUser.pw || "";
     targetUser.createdAt = targetUser.createdAt || Date.now();
 
     data.users = data.users || {};
@@ -1584,6 +1828,7 @@ function installStaffEditSaveOverride() {
         redirect: "follow"
       });
       const r = await resp.json();
+      applySyncMeta(syncMetaFromResult(r));
       if (!r.ok) {
         showModal({ title: "Save failed", sub: r.error || "error", big: "NG" });
         return;
@@ -1601,6 +1846,7 @@ function installStaffEditSaveOverride() {
           redirect: "follow"
         });
         const delResult = await delResp.json();
+        applySyncMeta(syncMetaFromResult(delResult));
         if (!delResult.ok) {
           showModal({ title: "Delete old ID failed", sub: delResult.error || "error", big: "NG" });
           return;
@@ -1615,7 +1861,6 @@ function installStaffEditSaveOverride() {
     targetUser.id = newId;
     targetUser.name = newName || newId;
     targetUser.userType = newType;
-    targetUser.pw = newPw || targetUser.pw || "";
     targetUser.createdAt = targetUser.createdAt || Date.now();
 
     data.users = data.users || {};
@@ -1867,6 +2112,7 @@ $("adminCredSave").addEventListener("click", async function(){
       redirect:"follow"
     });
     const r = await resp.json();
+    applySyncMeta(syncMetaFromResult(r));
     if(!r.ok){
       showModal({title:"更新失敗",sub:(r.error||"unauthorized"),big:"⚠️"});
       return;
@@ -2101,6 +2347,7 @@ renderAdminEdit = function() {
   $("editUname").value = u.name || "";
   $("editUpw").value = u.pw || "";
   $("editUserType").value = u.userType || "";
+  fillStaffPasswordField("editUpw", u.id);
 
   const now = new Date();
   const total = countTotal(u);
@@ -2575,6 +2822,7 @@ renderAdminTaskList = function() {
   _renderAdminTaskListGlobalBase();
   const title = document.querySelector("#adminTaskList .topbar .brand h1");
   if (title) title.textContent = "業務管理";
+  ensureTaskImportControls();
   renderAdminGlobalDashboard("adminTaskList", "adminTaskListNav", "task");
 };
 

@@ -36,7 +36,7 @@ try{
   data.session.userId=result.user.id;
   data.users=data.users||{};
   data.users[result.user.id]=Object.assign({},data.users[result.user.id]||{},{name:result.user.name,userType:result.user.userType});
-  saveData(data);
+  saveLocalOnly(data);
   userMonthCursor=startOfMonth(new Date());
   syncPull().then(changed=>{
     if(!changed || data.session.userId!==result.user.id) return;
@@ -46,7 +46,7 @@ try{
   if(result.user.userType==="社会人"){location.hash="#report-confirm";}else{
     const today=ymd(new Date());
     const visited=data.users[result.user.id].stampScreenVisitedToday===today;
-    if(!visited){data.users[result.user.id].stampScreenVisitedToday=today;saveData(data)}
+    if(!visited){data.users[result.user.id].stampScreenVisitedToday=today;saveLocalOnly(data)}
     location.hash="#user-stamp";
   }
 }catch(e){$("userAuthErr").textContent="通信エラー";$("userAuthErr").style.display="block";}
@@ -350,11 +350,13 @@ if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してくだ
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"upsertStaffUser",token:getToken(),id,pw,name,userType:utype}),redirect:"follow"});
   const r=await resp.json();
+  applySyncMeta(syncMetaFromResult(r));
   if(!r.ok){showModal({title:"追加失敗",sub:r.error||"エラー",big:"🚫"});return}
   data.users=data.users||{};
   const existing = data.users[id] || {};
-  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype, pw:pw});
-  saveData(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
+  data.users[id]=Object.assign({id:id, stamps:{}, incentives:{}, bonusPoints:0, lastCongrats50:0, lastMonthFirstStamp:"", reports:[], createdAt:Date.now(), proofingIncentives:{}, pendingStampRequest:null}, existing, {name:name, userType:utype});
+  invalidateStaffAccountsCache();
+  saveLocalOnly(data);$("newUserId").value="";$("newUserPw").value="";$("newUserName").value="";
   renderAdminReportMgmt();showModal({title:"追加しました",sub:"ログイン情報はサーバ側に保存されました。",big:"✅"});
 }catch(e){showModal({title:"通信エラー",sub:"ユーザー追加に失敗しました。",big:"📡"});}
 });
@@ -501,6 +503,7 @@ if(API_URL){
       redirect: "follow"
     });
     const r = await resp.json();
+    applySyncMeta(syncMetaFromResult(r));
     if (!r.ok) { showModal({title: "エラー", sub: r.error, big: "🚫"}); return; }
     if (nid !== oldId) {
       const delResp = await fetch(API_URL, {
@@ -510,17 +513,19 @@ if(API_URL){
         redirect: "follow"
       });
       const delResult = await delResp.json();
+      applySyncMeta(syncMetaFromResult(delResult));
       if (!delResult.ok) { showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"}); return; }
     }
   } catch(e) { showModal({title: "通信エラー", big: "📡"}); return; }
 }
-u.name=nn||nid;if(np)u.pw=np;u.userType=nt;
+u.name=nn||nid;u.userType=nt;
 if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
   if (data.userHourlyRates && data.userHourlyRates[oldId] != null) { data.userHourlyRates[nid] = data.userHourlyRates[oldId]; delete data.userHourlyRates[oldId]; }
   data.session.adminEditingUserId=nid}
 saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
+fillStaffPasswordField("editUpw", u.id);
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -840,7 +845,7 @@ function renderFileList(){
     const rm=document.createElement("span");rm.className="file-remove";rm.textContent="✕";
     rm.addEventListener("click",()=>{
       const existCount=(fileUploadTask.fileNames||[]).length;
-      if(i<existCount){fileUploadTask.fileNames.splice(i,1);saveData(data)}
+      if(i<existCount){fileUploadTask.fileNames.splice(i,1);if(fileUploadTask.fileIds&&fileUploadTask.fileIds.length>i)fileUploadTask.fileIds.splice(i,1);saveData(data)}
       else{pendingFiles.splice(i-existCount,1)}
       renderFileList();
     });
@@ -869,7 +874,7 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
     var f=pendingFiles[i];
     if(!fileUploadTask.fileNames)fileUploadTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f);
+      var result=await uploadFileToDrive(f, fileUploadTask.id);
       if(result){fileUploadTask.fileNames.push(result.fileName);if(!fileUploadTask.fileIds)fileUploadTask.fileIds=[];fileUploadTask.fileIds.push(result.fileId);}
       else{fileUploadTask.fileNames.push(f.name+"(アップロード失敗)");}
     }else{fileUploadTask.fileNames.push(f.name);}
@@ -899,7 +904,7 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
     var f=pendingFiles[i];
     if(!baseTask.fileNames)baseTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f);
+      var result=await uploadFileToDrive(f, baseTask.id);
       if(result){baseTask.fileNames.push(result.fileName);if(!baseTask.fileIds)baseTask.fileIds=[];baseTask.fileIds.push(result.fileId);}
       else{baseTask.fileNames.push(f.name);}
     }else{baseTask.fileNames.push(f.name);}
