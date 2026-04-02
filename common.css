@@ -112,6 +112,10 @@ textarea{resize:vertical;min-height:80px;}
 .day .n{display:flex;align-items:center;justify-content:space-between;font-weight:900;font-size:11px;margin-bottom:4px;font-family:var(--font-display);}
 .badgeToday{font-size:8px;font-weight:900;padding:2px 6px;border-radius:999px;background:linear-gradient(135deg,#ffd93d,#ff9a56);border:1px solid rgba(255,154,86,.3);color:#5d2e00;}
 .dayMeta{font-size:10px;color:var(--muted);}
+.dayState{position:absolute;left:6px;bottom:8px;font-size:9px;font-weight:900;letter-spacing:.04em;padding:2px 6px;border-radius:999px;background:transparent;color:transparent;pointer-events:none;}
+.dayState.pending-add{background:rgba(255,154,86,.16);color:var(--orange);border:1px solid rgba(255,154,86,.35);}
+.dayState.pending-remove{background:rgba(255,71,87,.12);color:var(--red);border:1px solid rgba(255,71,87,.28);}
+.dayState.pending-change{background:rgba(255,215,61,.14);color:#9a6a00;border:1px solid rgba(255,196,61,.3);}
 .stamp{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;
   position:absolute;right:5px;bottom:5px;background:rgba(45,27,78,.05);
   border:2px dashed rgba(45,27,78,.15);color:rgba(45,27,78,.3);font-size:10px;font-weight:900;transform:rotate(-6deg);}

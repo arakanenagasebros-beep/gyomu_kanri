@@ -1165,13 +1165,13 @@ $("taskAddSave").addEventListener("click",()=>{
   const wt=$("taWorkType").value;const tc=getTextCodes().filter(x=>x);
   if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);if(!t)return;
-    t.workType=wt;t.status=$("taStatus").value;t.requestDate=$("taRequestDate").value;t.deadline=$("taDeadline").value;t.completionDate=$("taCompletionDate").value;
-    t.manHours=parseInt($("taManHours").value)||1;t.textCodes=tc;t.taskType=$("taTaskType").value;t.content=$("taContent").value;t.employee=$("taEmployee").value;t.staff=$("taStaff").value;t.notes=$("taNote").value;
+    applyTaskDraft(t,{workType:wt,status:$("taStatus").value,requestDate:$("taRequestDate").value,deadline:$("taDeadline").value,completionDate:$("taCompletionDate").value,
+      manHours:$("taManHours").value,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value});
   } else {
-    data.tasks.push({id:Date.now(),seqNum:nextSeqNum(wt),workType:wt,status:$("taStatus").value,
+    data.tasks.push(createTaskDraft({id:Date.now(),seqNum:nextSeqNum(wt),workType:wt,status:$("taStatus").value,
       requestDate:$("taRequestDate").value,deadline:$("taDeadline").value,completionDate:$("taCompletionDate").value,
-      manHours:parseInt($("taManHours").value)||1,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,
-      employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value,validPointCount:0,fileNames:[]});
+      manHours:$("taManHours").value,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,
+      employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value}));
   }
   saveData(data);$("taskAddOverlay").style.display="none";
   // If admin and status is 依頼中, open file upload for attaching files
@@ -1499,7 +1499,7 @@ function convertImportRowsToTasks(rows) {
     if (!hasAnyValue) continue;
 
     const workType = record.workType || defaults.workType;
-    const task = {
+    const task = createTaskDraft({
       id: Date.now() + i,
       seqNum: nextSeqNum(workType),
       workType,
@@ -1507,18 +1507,14 @@ function convertImportRowsToTasks(rows) {
       requestDate: record.requestDate || defaults.requestDate,
       deadline: record.deadline || defaults.deadline,
       completionDate: record.completionDate || "",
-      manHours: Math.max(1, parseInt(record.manHours, 10) || 1),
-      textCodes: (record.textCodes || "").split(",").map(v => v.trim()).filter(Boolean),
+      manHours: record.manHours || defaults.manHours,
+      textCodes: record.textCodes || "",
       taskType: record.taskType || defaults.taskType,
       content: record.content || "",
       employee: record.employee || defaults.employee,
-      staff: defaults.staff,
-      notes: record.notes || "",
-      validPointCount: 0,
-      fileNames: [],
-      fileIds: []
-    };
-    setTaskStaffRef(task, record.staff || defaults.staff);
+      staff: record.staff || defaults.staff,
+      notes: record.notes || ""
+    });
     tasks.push(task);
     data.tasks.push(task);
   }

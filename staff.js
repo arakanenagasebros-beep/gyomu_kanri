@@ -589,6 +589,15 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     if (isPendingChange) return " pending-change";
     return "";
   }
+  function getPendingDayLabel(key){
+    const isPendingAdd = pendingChanges && originalStamps && pendingChanges[key] && !originalStamps[key];
+    const isPendingRemove = pendingChanges && originalStamps && !pendingChanges[key] && originalStamps[key];
+    const isPendingChange = pendingChanges && originalStamps && pendingChanges[key] && originalStamps[key] && pendingChanges[key] !== originalStamps[key];
+    if (isPendingAdd) return { cls: "dayState pending-add", text: "ADD" };
+    if (isPendingRemove) return { cls: "dayState pending-remove", text: "DEL" };
+    if (isPendingChange) return { cls: "dayState pending-change", text: pendingChanges[key] === "emergency" ? "EMG" : "CHG" };
+    return { cls: "dayState", text: "" };
+  }
 
   const rebuild = state.monthKey !== monthKey || !state.cells;
   if (rebuild) {
@@ -626,16 +635,21 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       const meta = document.createElement("div");
       meta.className = "dayMeta";
       meta.textContent = dowJa(d) + "曜";
+      const marker = document.createElement("div");
+      const markerState = getPendingDayLabel(key);
+      marker.className = markerState.cls;
+      marker.textContent = markerState.text;
       const st = document.createElement("div");
       const s = getStampState(key);
       st.className = s.cls;
       st.textContent = s.text;
       cell.appendChild(top);
       cell.appendChild(meta);
+      cell.appendChild(marker);
       cell.appendChild(st);
       if (clickable && onDayClick) cell.addEventListener("click", () => onDayClick(d));
       frag.appendChild(cell);
-      cells[key] = { cell, stampEl: st };
+      cells[key] = { cell, stampEl: st, markerEl: marker };
     }
     mount.appendChild(frag);
     mount._calendarState = { monthKey, cells };
@@ -645,8 +659,11 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
   Object.keys(state.cells).forEach(key => {
     const ref = state.cells[key];
     const s = getStampState(key);
+    const markerState = getPendingDayLabel(key);
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
+    if (ref.markerEl && ref.markerEl.className !== markerState.cls) ref.markerEl.className = markerState.cls;
+    if (ref.markerEl && ref.markerEl.textContent !== markerState.text) ref.markerEl.textContent = markerState.text;
     ref.cell.classList.toggle("clickable", !!clickable);
     ref.cell.classList.toggle("pending-add", getPendingDayClass(key) === " pending-add");
     ref.cell.classList.toggle("pending-remove", getPendingDayClass(key) === " pending-remove");
@@ -1012,13 +1029,13 @@ $("taskAddSave").addEventListener("click",()=>{
   const wt=$("taWorkType").value;const tc=getTextCodes().filter(x=>x);
   if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);if(!t)return;
-    t.workType=wt;t.status=$("taStatus").value;t.requestDate=$("taRequestDate").value;t.deadline=$("taDeadline").value;t.completionDate=$("taCompletionDate").value;
-    t.manHours=parseInt($("taManHours").value)||1;t.textCodes=tc;t.taskType=$("taTaskType").value;t.content=$("taContent").value;t.employee=$("taEmployee").value;t.staff=$("taStaff").value;t.notes=$("taNote").value;
+    applyTaskDraft(t,{workType:wt,status:$("taStatus").value,requestDate:$("taRequestDate").value,deadline:$("taDeadline").value,completionDate:$("taCompletionDate").value,
+      manHours:$("taManHours").value,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value});
   } else {
-    data.tasks.push({id:Date.now(),seqNum:nextSeqNum(wt),workType:wt,status:$("taStatus").value,
+    data.tasks.push(createTaskDraft({id:Date.now(),seqNum:nextSeqNum(wt),workType:wt,status:$("taStatus").value,
       requestDate:$("taRequestDate").value,deadline:$("taDeadline").value,completionDate:$("taCompletionDate").value,
-      manHours:parseInt($("taManHours").value)||1,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,
-      employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value,validPointCount:0,fileNames:[]});
+      manHours:$("taManHours").value,textCodes:tc,taskType:$("taTaskType").value,content:$("taContent").value,
+      employee:$("taEmployee").value,staff:$("taStaff").value,notes:$("taNote").value}));
   }
   saveData(data);$("taskAddOverlay").style.display="none";
   // If admin and status is 依頼中, open file upload for attaching files

@@ -1102,6 +1102,72 @@ function setTaskStaffRef(task,staffRef){
   if(u){task.staffUserId=u.id;task.staff=getUserDisplayName(u);return}
   task.staff=ref;delete task.staffUserId;
 }
+function normalizeTaskTextCodes(textCodes){
+  if(Array.isArray(textCodes))return textCodes.map(v=>String(v||"").trim()).filter(Boolean);
+  return String(textCodes||"").split(",").map(v=>v.trim()).filter(Boolean);
+}
+/*
+function applyTaskDraft(task,values){
+  if(!task)task={};
+  values=values||{};
+  task.workType=String(values.workType||task.workType||"蜃ｺ蜍､");
+  task.status=String(values.status||task.status||"萓晞ｼ蜑・);
+  task.requestDate=String(values.requestDate||"");
+  task.deadline=String(values.deadline||"");
+  task.completionDate=String(values.completionDate||"");
+  task.manHours=Math.max(1,parseInt(values.manHours,10)||1);
+  task.textCodes=normalizeTaskTextCodes(values.textCodes);
+  task.taskType=String(values.taskType||"");
+  task.content=String(values.content||"");
+  task.employee=String(values.employee||"");
+  task.notes=String(values.notes||"");
+  if(task.validPointCount==null)task.validPointCount=0;
+  if(!Array.isArray(task.vpEditHistory))task.vpEditHistory=[];
+  if(!Array.isArray(task.fileNames))task.fileNames=[];
+  if(!Array.isArray(task.fileIds))task.fileIds=[];
+  setTaskStaffRef(task,values.staff);
+  return task;
+}
+function createTaskDraft(values){
+  values=values||{};
+  const workType=String(values.workType||"蜃ｺ蜍､");
+  const task={
+    id:values.id!=null?values.id:Date.now(),
+    seqNum:values.seqNum!=null?values.seqNum:nextSeqNum(workType)
+  };
+  return applyTaskDraft(task,Object.assign({},values,{workType:workType}));
+}
+*/
+function applyTaskDraft(task,values){
+  if(!task)task={};
+  values=values||{};
+  task.workType=String(values.workType||task.workType||"出勤");
+  task.status=String(values.status||task.status||"依頼前");
+  task.requestDate=String(values.requestDate||"");
+  task.deadline=String(values.deadline||"");
+  task.completionDate=String(values.completionDate||"");
+  task.manHours=Math.max(1,parseInt(values.manHours,10)||1);
+  task.textCodes=normalizeTaskTextCodes(values.textCodes);
+  task.taskType=String(values.taskType||"");
+  task.content=String(values.content||"");
+  task.employee=String(values.employee||"");
+  task.notes=String(values.notes||"");
+  if(task.validPointCount==null)task.validPointCount=0;
+  if(!Array.isArray(task.vpEditHistory))task.vpEditHistory=[];
+  if(!Array.isArray(task.fileNames))task.fileNames=[];
+  if(!Array.isArray(task.fileIds))task.fileIds=[];
+  setTaskStaffRef(task,values.staff);
+  return task;
+}
+function createTaskDraft(values){
+  values=values||{};
+  const workType=String(values.workType||"出勤");
+  const task={
+    id:values.id!=null?values.id:Date.now(),
+    seqNum:values.seqNum!=null?values.seqNum:nextSeqNum(workType)
+  };
+  return applyTaskDraft(task,Object.assign({},values,{workType:workType}));
+}
 function getStaffWorkStatusForRef(staffRef){
   if(!data.staffWorkStatus)return"";
   const u=findUserByStaffRef(staffRef);
