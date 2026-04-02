@@ -104,6 +104,11 @@ textarea{resize:vertical;min-height:80px;}
 .day.muted{opacity:.45;background:rgba(255,255,255,.45);}
 .day.clickable{cursor:pointer;}
 .day.clickable:hover{border-color:rgba(255,107,157,.3);background:rgba(255,107,157,.05);}
+.day.pending-add{border-color:rgba(255,154,86,.55);background:linear-gradient(180deg,rgba(255,154,86,.12),rgba(255,255,255,.88));box-shadow:inset 0 0 0 1px rgba(255,154,86,.18);}
+.day.pending-remove{border-color:rgba(255,71,87,.45);background:linear-gradient(180deg,rgba(255,71,87,.08),rgba(255,255,255,.88));box-shadow:inset 0 0 0 1px rgba(255,71,87,.15);}
+.day.pending-change{border-color:rgba(255,196,61,.55);background:linear-gradient(180deg,rgba(255,215,61,.12),rgba(255,255,255,.88));box-shadow:inset 0 0 0 1px rgba(255,196,61,.18);}
+.day.pending-add .n,.day.pending-change .n{color:var(--orange);}
+.day.pending-remove .n{color:var(--red);}
 .day .n{display:flex;align-items:center;justify-content:space-between;font-weight:900;font-size:11px;margin-bottom:4px;font-family:var(--font-display);}
 .badgeToday{font-size:8px;font-weight:900;padding:2px 6px;border-radius:999px;background:linear-gradient(135deg,#ffd93d,#ff9a56);border:1px solid rgba(255,154,86,.3);color:#5d2e00;}
 .dayMeta{font-size:10px;color:var(--muted);}

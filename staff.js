@@ -526,6 +526,7 @@ saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 fillStaffPasswordField("editUpw", u.id);
+$("editUpw").value="";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -579,6 +580,16 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     return { cls: "stamp" + (stamped ? " on" : ""), text: stamped ? "✓" : "" };
   }
 
+  function getPendingDayClass(key){
+    const isPendingAdd = pendingChanges && originalStamps && pendingChanges[key] && !originalStamps[key];
+    const isPendingRemove = pendingChanges && originalStamps && !pendingChanges[key] && originalStamps[key];
+    const isPendingChange = pendingChanges && originalStamps && pendingChanges[key] && originalStamps[key] && pendingChanges[key] !== originalStamps[key];
+    if (isPendingAdd) return " pending-add";
+    if (isPendingRemove) return " pending-remove";
+    if (isPendingChange) return " pending-change";
+    return "";
+  }
+
   const rebuild = state.monthKey !== monthKey || !state.cells;
   if (rebuild) {
     mount.innerHTML = "";
@@ -600,7 +611,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       const inM = d.getMonth() === monthCursor.getMonth();
       const key = ymd(d);
       const cell = document.createElement("div");
-      cell.className = "day" + (inM ? "" : " muted") + (clickable ? " clickable" : "");
+      cell.className = "day" + (inM ? "" : " muted") + (clickable ? " clickable" : "") + getPendingDayClass(key);
       const top = document.createElement("div");
       top.className = "n";
       const num = document.createElement("span");
@@ -637,6 +648,9 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
     ref.cell.classList.toggle("clickable", !!clickable);
+    ref.cell.classList.toggle("pending-add", getPendingDayClass(key) === " pending-add");
+    ref.cell.classList.toggle("pending-remove", getPendingDayClass(key) === " pending-remove");
+    ref.cell.classList.toggle("pending-change", getPendingDayClass(key) === " pending-change");
     if (!clickable) ref.cell.onclick = null;
   });
 }
@@ -824,8 +838,8 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       });
       // Delete button
       const tdDel=document.createElement("td");
-      const bD=document.createElement("button");bD.className="btn danger small";bD.textContent="削除";
-      bD.addEventListener("click",()=>{if(!confirm("削除？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
+const bD=document.createElement("button");bD.className="btn danger small";bD.textContent="削除";
+bD.addEventListener("click",()=>{if(!confirm("この業務を削除しますか？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
       tdDel.appendChild(bD);tr.appendChild(tdDel);
     }
     tbodyEl.appendChild(tr);
@@ -844,6 +858,7 @@ function renderFileList(){
     item.innerHTML=`<span>📎 ${escapeHtml(name)}</span>`;
     const rm=document.createElement("span");rm.className="file-remove";rm.textContent="✕";
     rm.addEventListener("click",()=>{
+      if(!confirm("このファイルを削除しますか？"))return;
       const existCount=(fileUploadTask.fileNames||[]).length;
       if(i<existCount){fileUploadTask.fileNames.splice(i,1);if(fileUploadTask.fileIds&&fileUploadTask.fileIds.length>i)fileUploadTask.fileIds.splice(i,1);saveData(data)}
       else{pendingFiles.splice(i-existCount,1)}
@@ -1931,6 +1946,7 @@ doRenderReportList = function() {
       const report = filtered[rowIndex];
       const originalIndex = report ? u.reports.indexOf(report) : -1;
       if (!report || originalIndex < 0) return;
+      if (!confirm("この日報を削除しますか？")) return;
       deleteReportRemote(u.id, report.reportId, originalIndex)
         .then(() => renderReportConfirm())
         .catch(error => handleDirectActionError(error, "日報削除に失敗しました"));

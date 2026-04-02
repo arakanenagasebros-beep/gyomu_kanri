@@ -665,6 +665,7 @@ showModal({title:"更新完了",big:"✅"});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 fillStaffPasswordField("editUpw", u.id);
+$("editUpw").value="";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -718,6 +719,16 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     return { cls: "stamp" + (stamped ? " on" : ""), text: stamped ? "✓" : "" };
   }
 
+  function getPendingDayClass(key){
+    const isPendingAdd = pendingChanges && originalStamps && pendingChanges[key] && !originalStamps[key];
+    const isPendingRemove = pendingChanges && originalStamps && !pendingChanges[key] && originalStamps[key];
+    const isPendingChange = pendingChanges && originalStamps && pendingChanges[key] && originalStamps[key] && pendingChanges[key] !== originalStamps[key];
+    if (isPendingAdd) return " pending-add";
+    if (isPendingRemove) return " pending-remove";
+    if (isPendingChange) return " pending-change";
+    return "";
+  }
+
   const rebuild = state.monthKey !== monthKey || !state.cells;
   if (rebuild) {
     mount.innerHTML = "";
@@ -739,7 +750,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       const inM = d.getMonth() === monthCursor.getMonth();
       const key = ymd(d);
       const cell = document.createElement("div");
-      cell.className = "day" + (inM ? "" : " muted") + (clickable ? " clickable" : "");
+      cell.className = "day" + (inM ? "" : " muted") + (clickable ? " clickable" : "") + getPendingDayClass(key);
       const top = document.createElement("div");
       top.className = "n";
       const num = document.createElement("span");
@@ -776,6 +787,9 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
     ref.cell.classList.toggle("clickable", !!clickable);
+    ref.cell.classList.toggle("pending-add", getPendingDayClass(key) === " pending-add");
+    ref.cell.classList.toggle("pending-remove", getPendingDayClass(key) === " pending-remove");
+    ref.cell.classList.toggle("pending-change", getPendingDayClass(key) === " pending-change");
     if (!clickable) ref.cell.onclick = null;
   });
 }
@@ -976,8 +990,8 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       });
       // Delete button
       const tdDel=document.createElement("td");
-      const bD=document.createElement("button");bD.className="btn danger small";bD.textContent="削除";
-      bD.addEventListener("click",()=>{if(!confirm("削除？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
+const bD=document.createElement("button");bD.className="btn danger small";bD.textContent="削除";
+bD.addEventListener("click",()=>{if(!confirm("この業務を削除しますか？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
       tdDel.appendChild(bD);tr.appendChild(tdDel);
     }
     tbodyEl.appendChild(tr);
@@ -996,6 +1010,7 @@ function renderFileList(){
     item.innerHTML=`<span>📎 ${escapeHtml(name)}</span>`;
     const rm=document.createElement("span");rm.className="file-remove";rm.textContent="✕";
     rm.addEventListener("click",()=>{
+      if(!confirm("このファイルを削除しますか？"))return;
       const existCount=(fileUploadTask.fileNames||[]).length;
       if(i<existCount){fileUploadTask.fileNames.splice(i,1);if(fileUploadTask.fileIds&&fileUploadTask.fileIds.length>i)fileUploadTask.fileIds.splice(i,1);saveData(data)}
       else{pendingFiles.splice(i-existCount,1)}
@@ -1297,13 +1312,172 @@ function parseDelimitedTaskImport(text) {
   });
 }
 
-function parseTaskImportRows(text) {
+function decodeTaskImportBytes(bytes) {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function colLabelToIndex(label) {
+  let index = 0;
+  const text = String(label || "").toUpperCase();
+  for (let i = 0; i < text.length; i += 1) index = index * 26 + (text.charCodeAt(i) - 64);
+  return Math.max(0, index - 1);
+}
+
+function parseTaskImportSharedStringsXml(xmlText) {
+  const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+  return Array.from(doc.getElementsByTagName("si")).map(si =>
+    Array.from(si.getElementsByTagName("t")).map(node => node.textContent || "").join("")
+  );
+}
+
+function parseTaskImportSheetXml(xmlText, sharedStrings) {
+  const doc = new DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+  return Array.from(doc.getElementsByTagName("row")).map(row => {
+    const cells = [];
+    Array.from(row.getElementsByTagName("c")).forEach(cell => {
+      const ref = cell.getAttribute("r") || "";
+      const colRef = ref.replace(/[0-9]/g, "");
+      const idx = colLabelToIndex(colRef);
+      const type = cell.getAttribute("t") || "";
+      let value = "";
+      if (type === "s") {
+        const v = cell.getElementsByTagName("v")[0];
+        value = sharedStrings[parseInt(v && v.textContent, 10) || 0] || "";
+      } else if (type === "inlineStr") {
+        value = Array.from(cell.getElementsByTagName("t")).map(node => node.textContent || "").join("");
+      } else {
+        const v = cell.getElementsByTagName("v")[0];
+        value = v ? String(v.textContent || "") : "";
+      }
+      cells[idx] = String(value || "").trim();
+    });
+    return cells;
+  });
+}
+
+async function inflateTaskImportZipEntry(method, bytes) {
+  if (method === 0) return new Uint8Array(bytes);
+  if (method === 8) {
+    if (typeof DecompressionStream === "undefined") throw new Error("xlsx inflate unsupported");
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  throw new Error(`unsupported zip method: ${method}`);
+}
+
+async function readTaskImportZipEntries(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  let eocdOffset = -1;
+  for (let pos = arrayBuffer.byteLength - 22; pos >= 0; pos -= 1) {
+    if (view.getUint32(pos, true) === 0x06054b50) {
+      eocdOffset = pos;
+      break;
+    }
+  }
+  if (eocdOffset < 0) throw new Error("zip eocd not found");
+
+  const centralDirectorySize = view.getUint32(eocdOffset + 12, true);
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
+  const decoder = new TextDecoder("utf-8");
+  const entries = {};
+  let pos = centralDirectoryOffset;
+  const end = centralDirectoryOffset + centralDirectorySize;
+
+  while (pos < end) {
+    if (view.getUint32(pos, true) !== 0x02014b50) throw new Error("invalid central directory");
+    const compressionMethod = view.getUint16(pos + 10, true);
+    const compressedSize = view.getUint32(pos + 20, true);
+    const fileNameLength = view.getUint16(pos + 28, true);
+    const extraLength = view.getUint16(pos + 30, true);
+    const commentLength = view.getUint16(pos + 32, true);
+    const localHeaderOffset = view.getUint32(pos + 42, true);
+    const fileNameBytes = new Uint8Array(arrayBuffer, pos + 46, fileNameLength);
+    const fileName = decoder.decode(fileNameBytes);
+    pos += 46 + fileNameLength + extraLength + commentLength;
+
+    if (view.getUint32(localHeaderOffset, true) !== 0x04034b50) throw new Error("invalid local header");
+    const localNameLength = view.getUint16(localHeaderOffset + 26, true);
+    const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
+    const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+    const compressed = new Uint8Array(arrayBuffer.slice(dataStart, dataStart + compressedSize));
+    entries[fileName] = await inflateTaskImportZipEntry(compressionMethod, compressed);
+  }
+
+  return entries;
+}
+
+async function parseTaskImportRowsFromXlsx(file) {
+  const entries = await readTaskImportZipEntries(await file.arrayBuffer());
+  const sharedStrings = entries["xl/sharedStrings.xml"]
+    ? parseTaskImportSharedStringsXml(decodeTaskImportBytes(entries["xl/sharedStrings.xml"]))
+    : [];
+  const sheetPath = Object.keys(entries).filter(name => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name)).sort()[0];
+  if (!sheetPath) return [];
+  return parseTaskImportSheetXml(decodeTaskImportBytes(entries[sheetPath]), sharedStrings);
+}
+
+function normalizeTaskImportValue(key, value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  if ((key === "requestDate" || key === "deadline" || key === "completionDate") && /^\d+(\.\d+)?$/.test(raw)) {
+    const serial = Number(raw);
+    if (isFinite(serial) && serial > 0) {
+      const utc = Date.UTC(1899, 11, 30) + Math.round(serial * 86400000);
+      const date = new Date(utc);
+      const y = date.getUTCFullYear();
+      const m = pad2(date.getUTCMonth() + 1);
+      const d = pad2(date.getUTCDate());
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return raw;
+}
+
+function parseTaskImportTableRows(raw) {
+  const doc = new DOMParser().parseFromString(String(raw || ""), "text/html");
+  const table = doc.querySelector('table[data-template="task-import"]') || doc.querySelector("table");
+  if (!table) return [];
+  return Array.from(table.querySelectorAll("tr")).map(tr => Array.from(tr.children).map(cell => String(cell.textContent || "").trim()));
+}
+
+function extractTaskImportSheetRefs(raw) {
+  const refs = [];
+  const text = String(raw || "");
+  const patterns = [
+    /<x:WorksheetSource[^>]+HRef="([^"]+)"/gi,
+    /<frame[^>]+src="([^"]+sheet[^"]*\.htm[^"]*)"/gi,
+    /<link[^>]+id="?shLink"?[^>]+href="([^"]+)"/gi
+  ];
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(text))) {
+      const href = String(match[1] || "").trim();
+      if (href && refs.indexOf(href) < 0) refs.push(href);
+    }
+  });
+  return refs;
+}
+
+async function fetchTaskImportSheetRows(sheetRef) {
+  const url = new URL(sheetRef, window.location.href.split("#")[0]);
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  if (!response.ok) throw new Error(`sheet fetch failed: ${response.status}`);
+  const html = await response.text();
+  return parseTaskImportTableRows(html);
+}
+
+async function parseTaskImportRows(text) {
   const raw = String(text || "");
   if (/<table/i.test(raw)) {
-    const doc = new DOMParser().parseFromString(raw, "text/html");
-    const table = doc.querySelector('table[data-template="task-import"]') || doc.querySelector("table");
-    if (!table) return [];
-    return Array.from(table.querySelectorAll("tr")).map(tr => Array.from(tr.children).map(cell => String(cell.textContent || "").trim()));
+    const rows = parseTaskImportTableRows(raw);
+    if (rows.length) return rows;
+  }
+  const sheetRefs = extractTaskImportSheetRefs(raw);
+  for (let i = 0; i < sheetRefs.length; i += 1) {
+    try {
+      const rows = await fetchTaskImportSheetRows(sheetRefs[i]);
+      if (rows.length) return rows;
+    } catch (_error) {}
   }
   return parseDelimitedTaskImport(raw);
 }
@@ -1311,13 +1485,16 @@ function parseTaskImportRows(text) {
 function convertImportRowsToTasks(rows) {
   if (!rows.length) return [];
   const headerMap = rows[0].map(normalizeTaskImportHeader);
+  const validHeaders = getTaskImportHeaders().map(header => header.key);
+  const matchedHeaderCount = headerMap.filter(key => validHeaders.indexOf(key) >= 0).length;
+  if (matchedHeaderCount < 2) return [];
   const tasks = [];
   const defaults = getTaskImportDefaults();
 
   for (let i = 1; i < rows.length; i += 1) {
     const row = rows[i];
     const record = {};
-    headerMap.forEach((key, idx) => { record[key] = String((row && row[idx]) || "").trim(); });
+    headerMap.forEach((key, idx) => { record[key] = normalizeTaskImportValue(key, (row && row[idx]) || ""); });
     const hasAnyValue = Object.values(record).some(value => String(value || "").trim() !== "");
     if (!hasAnyValue) continue;
 
@@ -1350,8 +1527,9 @@ function convertImportRowsToTasks(rows) {
 
 async function importTasksFromFile(file) {
   if (!file) return;
-  const text = await file.text();
-  const rows = parseTaskImportRows(text);
+  const isXlsx = /\.xlsx$/i.test(String(file.name || ""));
+  const text = isXlsx ? "" : await file.text();
+  const rows = isXlsx ? await parseTaskImportRowsFromXlsx(file) : await parseTaskImportRows(text);
   const imported = convertImportRowsToTasks(rows);
   if (!imported.length) {
     showModal({ title: "取込対象がありません", sub: "テンプレートの1行目は見出しです", big: "NG" });
@@ -1370,7 +1548,9 @@ function ensureTaskImportControls() {
     templateBtn.id = "atlDownloadTemplate";
     templateBtn.className = "btn ghost small";
     templateBtn.textContent = "テンプレート";
-    templateBtn.addEventListener("click", downloadTaskImportTemplate);
+    templateBtn.addEventListener("click", () => {
+      downloadTaskImportTemplate().catch(error => handleDirectActionError(error, "テンプレート取得に失敗しました"));
+    });
     addBtn.parentNode.insertBefore(templateBtn, addBtn);
   }
   if (!document.getElementById("atlImportExcel")) {
@@ -1391,7 +1571,7 @@ function ensureTaskImportControls() {
     const input = document.createElement("input");
     input.type = "file";
     input.id = "atlImportFile";
-    input.accept = ".xls,.csv,.tsv,.txt";
+    input.accept = ".xlsx,.xls,.htm,.html,.csv,.tsv,.txt";
     input.style.display = "none";
     input.addEventListener("change", event => {
       const file = event.target && event.target.files && event.target.files[0];
@@ -1400,6 +1580,56 @@ function ensureTaskImportControls() {
     addBtn.parentNode.appendChild(input);
   }
 }
+
+importTasksFromFile = async function(file) {
+  if (!file) return;
+  const text = await file.text();
+  const rows = await parseTaskImportRows(text);
+  const imported = convertImportRowsToTasks(rows);
+  if (!imported.length) {
+    const looksLikeExcelFrameset = /WorksheetSource|ExcelWorkbook|sheet001\.htm|File-List/i.test(text);
+    const sub = looksLikeExcelFrameset
+      ? "この .xls は分割保存形式です。テンプレートを再ダウンロードするか、.files 内の sheet001.htm を取り込んでください。"
+      : "テンプレートの1行目は見出し、2行目以降にデータを入れてください。";
+    showModal({ title: "Excel取込できません", sub, big: "NG" });
+    return;
+  }
+  saveData(data);
+  renderAdminTaskList();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+};
+
+downloadTaskImportTemplate = async function() {
+  const response = await fetch("./業務追加テンプレート.xlsx", { cache: "no-store" });
+  if (!response.ok) throw new Error("template fetch failed");
+  const blob = await response.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "業務追加テンプレート.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+importTasksFromFile = async function(file) {
+  if (!file) return;
+  const isXlsx = /\.xlsx$/i.test(String(file.name || ""));
+  const text = isXlsx ? "" : await file.text();
+  const rows = isXlsx ? await parseTaskImportRowsFromXlsx(file) : await parseTaskImportRows(text);
+  const imported = convertImportRowsToTasks(rows);
+  if (!imported.length) {
+    const looksLikeExcelFrameset = !isXlsx && /WorksheetSource|ExcelWorkbook|sheet001\.htm|File-List/i.test(text);
+    const sub = looksLikeExcelFrameset
+      ? "この .xls は分割保存形式です。.xlsx テンプレートを使うか、.files 内の sheet001.htm を取り込んでください。"
+      : "テンプレートの1行目は見出しです。2行目以降にデータを入れてください。";
+    showModal({ title: "Excel取込できません", sub, big: "NG" });
+    return;
+  }
+  saveData(data);
+  renderAdminTaskList();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+};
 
 /* === STAFF TASK LIST === */
 let stlInit=false;
@@ -1734,7 +1964,6 @@ showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
     return;
   }
   invalidateStaffAccountsCache();
-  invalidateStaffAccountsCache();
 
       if (!isCreate && newId !== oldId) {
         const delResp = await fetch(API_URL, {
@@ -1811,7 +2040,18 @@ function installStaffEditSaveOverride() {
     if (!newId) { showModal({ title: "ID is required", big: "NG" }); return; }
     if ((isCreate || newId !== oldId) && data.users[newId]) { showModal({ title: "ID already exists", big: "NG" }); return; }
     if (!API_URL) { showModal({ title: "API not connected", sub: "Check URL in settings", big: "NG" }); return; }
-    if (!newPw && isCreate) { showModal({ title: "PW is required", big: "NG" }); return; }
+    let passwordForSave = newPw;
+
+    if (!passwordForSave && isCreate) { showModal({ title: "PW is required", big: "NG" }); return; }
+    if (!passwordForSave && !isCreate) {
+      try {
+        passwordForSave = await fetchStaffPasswordForAdmin(oldId, true);
+      } catch (_error) {}
+      if (!passwordForSave) {
+        showModal({ title: "PW is required", sub: "Current password could not be loaded", big: "NG" });
+        return;
+      }
+    }
 
     try {
       const resp = await fetch(API_URL, {
@@ -1821,7 +2061,7 @@ function installStaffEditSaveOverride() {
           _action: "upsertStaffUser",
           token: getToken(),
           id: newId,
-          pw: newPw || (existingUser && existingUser.pw) || "",
+          pw: passwordForSave,
           name: newName || newId,
           userType: newType
         }),
@@ -1833,6 +2073,7 @@ function installStaffEditSaveOverride() {
         showModal({ title: "Save failed", sub: r.error || "error", big: "NG" });
         return;
       }
+      invalidateStaffAccountsCache();
 
       if (!isCreate && newId !== oldId) {
         const delResp = await fetch(API_URL, {
@@ -2345,7 +2586,7 @@ renderAdminEdit = function() {
   $("editUserId").textContent = u.id;
   $("editUid").value = u.id;
   $("editUname").value = u.name || "";
-  $("editUpw").value = u.pw || "";
+  $("editUpw").value = "";
   $("editUserType").value = u.userType || "";
   fillStaffPasswordField("editUpw", u.id);
 
