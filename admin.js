@@ -565,7 +565,7 @@ const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const a=document.cre
 
 /* === ADMIN STAMP HOME === */
 $("btnExport").addEventListener("click",()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stampcard_export.json";document.body.appendChild(a);a.click();a.remove();showModal({title:"エクスポート完了",big:"📦"})});
-$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
+if($("btnResetAll"))$("btnResetAll").addEventListener("click",()=>{if(!confirm("全ユーザー初期化？"))return;Object.values(data.users).forEach(u=>{u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed});saveData(data);renderAdminHome();showModal({title:"全初期化完了",big:"🧼"})});
 
 function renderAdminHome(){renderAdminNotifications();const now=new Date();$("adminMonthInfo").textContent=monthLabelJa(now);$("adminTodayPassword").textContent="取得中…";fetchTodayPasswordForAdmin(false).then(p=>{$("adminTodayPassword").textContent=p||"―";}).catch(()=>{$("adminTodayPassword").textContent="―";});const users=Object.entries(data.users||{}).map(([id,u])=>{u=u||{}; if(!u.id) u.id=id; return u;}).filter(u=>u.userType==="学生").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));const tb=$("adminTbody");tb.innerHTML="";
 users.forEach((u,idx)=>{const total=countTotal(u);const rank=getRank(total);const sInc=calcStampIncentive(total);
@@ -592,7 +592,7 @@ $("ePrev").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCurs
 $("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
 $("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
 $("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
-$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
+if($("resetThisUser"))$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
 $("btnSaveUserInfo").addEventListener("click", async ()=>{
   const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;
   const nid=$("editUid").value.trim(),nn=$("editUname").value.trim(),np=$("editUpw").value.trim(),nt=$("editUserType").value;
@@ -729,6 +729,16 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     return "";
   }
 
+  function getPendingDayLabel(key){
+    const isPendingAdd = pendingChanges && originalStamps && pendingChanges[key] && !originalStamps[key];
+    const isPendingRemove = pendingChanges && originalStamps && !pendingChanges[key] && originalStamps[key];
+    const isPendingChange = pendingChanges && originalStamps && pendingChanges[key] && originalStamps[key] && pendingChanges[key] !== originalStamps[key];
+    if (isPendingAdd) return { cls: "dayState pending-add", text: "ADD" };
+    if (isPendingRemove) return { cls: "dayState pending-remove", text: "DEL" };
+    if (isPendingChange) return { cls: "dayState pending-change", text: pendingChanges[key] === "emergency" ? "EMG" : "CHG" };
+    return { cls: "dayState", text: "" };
+  }
+
   const rebuild = state.monthKey !== monthKey || !state.cells;
   if (rebuild) {
     mount.innerHTML = "";
@@ -765,16 +775,21 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       const meta = document.createElement("div");
       meta.className = "dayMeta";
       meta.textContent = dowJa(d) + "曜";
+      const marker = document.createElement("div");
+      const markerState = getPendingDayLabel(key);
+      marker.className = markerState.cls;
+      marker.textContent = markerState.text;
       const st = document.createElement("div");
       const s = getStampState(key);
       st.className = s.cls;
       st.textContent = s.text;
       cell.appendChild(top);
       cell.appendChild(meta);
+      cell.appendChild(marker);
       cell.appendChild(st);
       if (clickable && onDayClick) cell.addEventListener("click", () => onDayClick(d));
       frag.appendChild(cell);
-      cells[key] = { cell, stampEl: st };
+      cells[key] = { cell, stampEl: st, markerEl: marker };
     }
     mount.appendChild(frag);
     mount._calendarState = { monthKey, cells };
@@ -784,8 +799,11 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
   Object.keys(state.cells).forEach(key => {
     const ref = state.cells[key];
     const s = getStampState(key);
+    const markerState = getPendingDayLabel(key);
     if (ref.stampEl.className !== s.cls) ref.stampEl.className = s.cls;
     if (ref.stampEl.textContent !== s.text) ref.stampEl.textContent = s.text;
+    if (ref.markerEl && ref.markerEl.className !== markerState.cls) ref.markerEl.className = markerState.cls;
+    if (ref.markerEl && ref.markerEl.textContent !== markerState.text) ref.markerEl.textContent = markerState.text;
     ref.cell.classList.toggle("clickable", !!clickable);
     ref.cell.classList.toggle("pending-add", getPendingDayClass(key) === " pending-add");
     ref.cell.classList.toggle("pending-remove", getPendingDayClass(key) === " pending-remove");
@@ -1619,6 +1637,358 @@ importTasksFromFile = async function(file) {
     const sub = looksLikeExcelFrameset
       ? "この .xls は分割保存形式です。.xlsx テンプレートを使うか、.files 内の sheet001.htm を取り込んでください。"
       : "テンプレートの1行目は見出しです。2行目以降にデータを入れてください。";
+    showModal({ title: "Excel取込できません", sub, big: "NG" });
+    return;
+  }
+  saveData(data);
+  renderAdminTaskList();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+};
+
+const TASK_IMPORT_TEMPLATE_FILE_NAME = "業務追加テンプレート.xlsx";
+let _taskImportCrcTable = null;
+
+function getTaskImportTemplateOptionValues() {
+  return {
+    workTypeValues: Array.from(($("taWorkType") && $("taWorkType").options) || []).map(o => o.value).filter(Boolean),
+    statusValues: Array.from(($("taStatus") && $("taStatus").options) || []).map(o => o.value).filter(Boolean),
+    employeeValues: getEmployees(),
+    staffValues: ["未指定"].concat(getStaffUsers().map(getUserDisplayName))
+  };
+}
+
+function escapeTaskImportTemplateXml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;");
+}
+
+function indexToTaskImportTemplateCol(index) {
+  let n = index + 1;
+  let label = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
+}
+
+function makeTaskImportTemplateCell(ref, value, styleId) {
+  const styleAttr = styleId != null ? ` s="${styleId}"` : "";
+  return `<c r="${ref}" t="inlineStr"${styleAttr}><is><t xml:space="preserve">${escapeTaskImportTemplateXml(value)}</t></is></c>`;
+}
+
+function getTaskImportTemplateRuleText() {
+  const defaults = getTaskImportDefaults();
+  const opts = getTaskImportTemplateOptionValues();
+  return [
+    `2行目が見出し、3行目以降に入力してください。空欄の行は無視されます。空欄時は 業務形態=${defaults.workType} / 状態=${defaults.status} / 依頼日=${defaults.requestDate} / 期限=${defaults.deadline} / 工数=${defaults.manHours} / 担当スタッフ=${defaults.staff} を補完します。`,
+    `業務形態: ${(opts.workTypeValues.join(" / ")) || defaults.workType}`,
+    `状態: ${(opts.statusValues.join(" / ")) || defaults.status}`,
+    `担当社員: ${(opts.employeeValues.join(" / ")) || "未設定"}`,
+    `担当スタッフ: ${(opts.staffValues.join(" / ")) || defaults.staff}`,
+    "テキストコードは複数ある場合のみカンマ区切りで入力してください。"
+  ].join("\n");
+}
+
+function buildTaskImportTemplateSheetXml() {
+  const headers = getTaskImportHeaders();
+  const lastCol = indexToTaskImportTemplateCol(headers.length - 1);
+  const colsXml = headers.map((_, index) => {
+    const width = index === headers.length - 1 ? 24 : 16;
+    return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`;
+  }).join("");
+  const headerCells = headers.map((header, index) =>
+    makeTaskImportTemplateCell(`${indexToTaskImportTemplateCol(index)}2`, header.label, 2)
+  ).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <dimension ref="A1:${lastCol}2"/>
+  <sheetViews>
+    <sheetView workbookViewId="0">
+      <pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>
+      <selection pane="bottomLeft" activeCell="A3" sqref="A3"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>${colsXml}</cols>
+  <sheetData>
+    <row r="1" ht="54" customHeight="1">${makeTaskImportTemplateCell("A1", getTaskImportTemplateRuleText(), 1)}</row>
+    <row r="2" ht="24" customHeight="1">${headerCells}</row>
+  </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:${lastCol}1"/></mergeCells>
+</worksheet>`;
+}
+
+function buildTaskImportTemplateStylesXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><color rgb="FF4B3869"/><name val="Calibri"/><family val="2"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFDF1D9"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FFE8DCCB"/></left>
+      <right style="thin"><color rgb="FFE8DCCB"/></right>
+      <top style="thin"><color rgb="FFE8DCCB"/></top>
+      <bottom style="thin"><color rgb="FFE8DCCB"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="left" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+}
+
+function buildTaskImportTemplateBlob() {
+  const createdAt = new Date().toISOString();
+  const files = [
+    {
+      name: "[Content_Types].xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`
+    },
+    {
+      name: "_rels/.rels",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`
+    },
+    {
+      name: "docProps/app.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>業務管理アプリ</Application>
+</Properties>`
+    },
+    {
+      name: "docProps/core.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>業務追加テンプレート</dc:title>
+  <dc:creator>業務管理アプリ</dc:creator>
+  <cp:lastModifiedBy>業務管理アプリ</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:modified>
+</cp:coreProperties>`
+    },
+    {
+      name: "xl/workbook.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="業務追加テンプレート" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`
+    },
+    { name: "xl/styles.xml", data: buildTaskImportTemplateStylesXml() },
+    { name: "xl/worksheets/sheet1.xml", data: buildTaskImportTemplateSheetXml() }
+  ];
+  return createTaskImportTemplateZipBlob(files);
+}
+
+function getTaskImportTemplateCrcTable() {
+  if (_taskImportCrcTable) return _taskImportCrcTable;
+  _taskImportCrcTable = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    _taskImportCrcTable[n] = c >>> 0;
+  }
+  return _taskImportCrcTable;
+}
+
+function calcTaskImportTemplateCrc32(bytes) {
+  const table = getTaskImportTemplateCrcTable();
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) crc = table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createTaskImportTemplateZipBlob(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  files.forEach(file => {
+    const fileNameBytes = encoder.encode(file.name);
+    const dataBytes = file.data instanceof Uint8Array ? file.data : encoder.encode(String(file.data || ""));
+    const crc32 = calcTaskImportTemplateCrc32(dataBytes);
+
+    const local = new Uint8Array(30 + fileNameBytes.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, 0, true);
+    localView.setUint16(12, 0, true);
+    localView.setUint32(14, crc32, true);
+    localView.setUint32(18, dataBytes.length, true);
+    localView.setUint32(22, dataBytes.length, true);
+    localView.setUint16(26, fileNameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    local.set(fileNameBytes, 30);
+    localParts.push(local, dataBytes);
+
+    const central = new Uint8Array(46 + fileNameBytes.length);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0x0800, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, 0, true);
+    centralView.setUint16(14, 0, true);
+    centralView.setUint32(16, crc32, true);
+    centralView.setUint32(20, dataBytes.length, true);
+    centralView.setUint32(24, dataBytes.length, true);
+    centralView.setUint16(28, fileNameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    central.set(fileNameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + dataBytes.length;
+  });
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, offset, true);
+  endView.setUint16(20, 0, true);
+
+  return new Blob(localParts.concat(centralParts, [end]), {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  });
+}
+
+function findTaskImportHeaderRowIndex(rows) {
+  const validHeaders = getTaskImportHeaders().map(header => header.key);
+  let bestIndex = -1;
+  let bestCount = 0;
+  const limit = Math.min(rows.length, 10);
+  for (let i = 0; i < limit; i += 1) {
+    const headerMap = (rows[i] || []).map(normalizeTaskImportHeader);
+    const matchedCount = headerMap.filter(key => validHeaders.indexOf(key) >= 0).length;
+    if (matchedCount > bestCount) {
+      bestCount = matchedCount;
+      bestIndex = i;
+    }
+  }
+  return bestCount >= 2 ? bestIndex : -1;
+}
+
+convertImportRowsToTasks = function(rows) {
+  if (!rows.length) return [];
+  const headerRowIndex = findTaskImportHeaderRowIndex(rows);
+  if (headerRowIndex < 0) return [];
+  const headerMap = rows[headerRowIndex].map(normalizeTaskImportHeader);
+  const tasks = [];
+  const defaults = getTaskImportDefaults();
+
+  for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    const record = {};
+    headerMap.forEach((key, idx) => { record[key] = normalizeTaskImportValue(key, (row && row[idx]) || ""); });
+    const hasAnyValue = Object.values(record).some(value => String(value || "").trim() !== "");
+    if (!hasAnyValue) continue;
+
+    const workType = record.workType || defaults.workType;
+    const task = createTaskDraft({
+      id: Date.now() + i,
+      seqNum: nextSeqNum(workType),
+      workType,
+      status: record.status || defaults.status,
+      requestDate: record.requestDate || defaults.requestDate,
+      deadline: record.deadline || defaults.deadline,
+      completionDate: record.completionDate || "",
+      manHours: record.manHours || defaults.manHours,
+      textCodes: record.textCodes || "",
+      taskType: record.taskType || defaults.taskType,
+      content: record.content || "",
+      employee: record.employee || defaults.employee,
+      staff: record.staff || defaults.staff,
+      notes: record.notes || ""
+    });
+    tasks.push(task);
+    data.tasks.push(task);
+  }
+  return tasks;
+};
+
+downloadTaskImportTemplate = async function() {
+  const blob = buildTaskImportTemplateBlob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = TASK_IMPORT_TEMPLATE_FILE_NAME;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+importTasksFromFile = async function(file) {
+  if (!file) return;
+  const isXlsx = /\.xlsx$/i.test(String(file.name || ""));
+  const text = isXlsx ? "" : await file.text();
+  const rows = isXlsx ? await parseTaskImportRowsFromXlsx(file) : await parseTaskImportRows(text);
+  const imported = convertImportRowsToTasks(rows);
+  if (!imported.length) {
+    const looksLikeExcelFrameset = !isXlsx && /WorksheetSource|ExcelWorkbook|sheet001\.htm|File-List/i.test(text);
+    const sub = looksLikeExcelFrameset
+      ? "この .xls は分割保存形式です。テンプレートから出力した .xlsx を使うか、.files 内の sheet001.htm を取り込んでください。"
+      : "テンプレートは1行目が説明、2行目が見出しです。3行目以降にデータを入れてください。";
     showModal({ title: "Excel取込できません", sub, big: "NG" });
     return;
   }
