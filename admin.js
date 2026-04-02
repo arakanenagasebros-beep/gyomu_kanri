@@ -787,9 +787,9 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
       cell.appendChild(meta);
       cell.appendChild(marker);
       cell.appendChild(st);
-      if (clickable && onDayClick) cell.addEventListener("click", () => onDayClick(d));
+      cell.onclick = clickable && onDayClick ? () => onDayClick(d) : null;
       frag.appendChild(cell);
-      cells[key] = { cell, stampEl: st, markerEl: marker };
+      cells[key] = { cell, stampEl: st, markerEl: marker, dayDate: new Date(d) };
     }
     mount.appendChild(frag);
     mount._calendarState = { monthKey, cells };
@@ -808,7 +808,7 @@ function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendi
     ref.cell.classList.toggle("pending-add", getPendingDayClass(key) === " pending-add");
     ref.cell.classList.toggle("pending-remove", getPendingDayClass(key) === " pending-remove");
     ref.cell.classList.toggle("pending-change", getPendingDayClass(key) === " pending-change");
-    if (!clickable) ref.cell.onclick = null;
+    ref.cell.onclick = clickable && onDayClick ? () => onDayClick(ref.dayDate || new Date(`${key}T00:00:00`)) : null;
   });
 }
 
