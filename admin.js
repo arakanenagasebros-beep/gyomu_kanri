@@ -45,6 +45,7 @@ function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.sessio
 $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEventListener("click",doAdminLogout);$("atlLogout").addEventListener("click",doAdminLogout);$("ddeLogout").addEventListener("click",doAdminLogout);
 
 async function bootstrapDefaultStaffIfNeeded(){
+  return false;
   if (_defaultStaffBootstrapPromise) return _defaultStaffBootstrapPromise;
   if (!data.session.adminAuthed || !API_URL || !getToken()) return false;
   const missingStaff = DEFAULT_BOOTSTRAP_STAFF.filter(staff => !((data.users || {})[staff.id]));
@@ -2508,6 +2509,7 @@ dBtn.addEventListener("click", async ()=>{
   if(!confirm(`「${u.name||u.id}」を削除しますか？\nこのスタッフの全データ（日報・スタンプ等）も削除されます。`))return;
   if(!API_URL){showModal({title:"API未接続",sub:"⚙でURLを設定してください",big:"🔌"});return}
 
+  let deleteSyncMeta = null;
   try{
     const resp = await fetch(API_URL, {
       method: "POST",
@@ -2520,7 +2522,8 @@ dBtn.addEventListener("click", async ()=>{
       redirect: "follow"
     });
     const r = await resp.json();
-    applySyncMeta(syncMetaFromResult(r));
+    deleteSyncMeta = syncMetaFromResult(r);
+    applySyncMeta(deleteSyncMeta);
     if(!r.ok){
       showModal({title:"削除失敗",sub:r.error||"エラー",big:"🚫"});
       return;
@@ -2535,6 +2538,12 @@ dBtn.addEventListener("click", async ()=>{
   if(data.staffWorkStatus){
     const nm=u.name||u.id;
     if(data.staffWorkStatus[nm])delete data.staffWorkStatus[nm];
+  }
+  if(deleteSyncMeta){
+    updateSyncedBaseline(baseline=>{
+      baseline.users = baseline.users || {};
+      delete baseline.users[u.id];
+    }, deleteSyncMeta);
   }
   saveData(data);
   renderDropdownEdit();
@@ -2760,6 +2769,20 @@ showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
       }
     }
 
+    if (latestStaffSyncMeta) {
+      updateSyncedBaseline(baseline => {
+        baseline.users = baseline.users || {};
+        const baselineSource = (!isCreate && oldId && baseline.users[oldId]) || baseline.users[newId] || {};
+        baseline.users[newId] = Object.assign({}, baselineSource, {
+          id: newId,
+          name: targetUser.name || newId,
+          userType: targetUser.userType || ""
+        });
+        if (targetUser.createdAt != null) baseline.users[newId].createdAt = targetUser.createdAt;
+        if (!isCreate && newId !== oldId) delete baseline.users[oldId];
+      }, latestStaffSyncMeta);
+    }
+
     _staffEditId = newId;
     _staffEditMode = "edit";
     setStaffEditOverlayTitle("スタッフ情報編集");
@@ -2794,6 +2817,7 @@ function installStaffEditSaveOverride() {
     if ((isCreate || newId !== oldId) && data.users[newId]) { showModal({ title: "ID already exists", big: "NG" }); return; }
     if (!API_URL) { showModal({ title: "API not connected", sub: "Check URL in settings", big: "NG" }); return; }
     let passwordForSave = newPw;
+    let latestStaffSyncMeta = null;
 
     if (!passwordForSave && isCreate) { showModal({ title: "PW is required", big: "NG" }); return; }
     if (!passwordForSave && !isCreate) {
@@ -2821,7 +2845,8 @@ function installStaffEditSaveOverride() {
         redirect: "follow"
       });
       const r = await resp.json();
-      applySyncMeta(syncMetaFromResult(r));
+      latestStaffSyncMeta = syncMetaFromResult(r);
+      applySyncMeta(latestStaffSyncMeta);
       if (!r.ok) {
         showModal({ title: "Save failed", sub: r.error || "error", big: "NG" });
         return;
@@ -2840,7 +2865,8 @@ function installStaffEditSaveOverride() {
           redirect: "follow"
         });
         const delResult = await delResp.json();
-        applySyncMeta(syncMetaFromResult(delResult));
+        latestStaffSyncMeta = syncMetaFromResult(delResult);
+        applySyncMeta(latestStaffSyncMeta);
         if (!delResult.ok) {
           showModal({ title: "Delete old ID failed", sub: delResult.error || "error", big: "NG" });
           return;
