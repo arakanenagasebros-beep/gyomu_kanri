@@ -877,6 +877,21 @@ async function addReportRemote(targetUserId, report) {
   }
 }
 
+async function addReportsBatchRemote(targetUserId, reports) {
+  const nextReports = Array.isArray(reports) ? reports.filter(Boolean).map(report => cloneDeep(report)) : [];
+  if (!nextReports.length) return [];
+  try {
+    const result = await postDirectAction("addReportsBatch", { targetUserId, reports: nextReports });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return Array.isArray(result.reports) ? result.reports : [];
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    const added = [];
+    for (const report of nextReports) added.push(await addReportRemote(targetUserId, report));
+    return added;
+  }
+}
+
 async function updateReportRemote(targetUserId, reportId, reportIndex, patch) {
   try {
     const result = await postDirectAction("updateReport", {

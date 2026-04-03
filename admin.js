@@ -1997,6 +1997,393 @@ importTasksFromFile = async function(file) {
   showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
 };
 
+const REPORT_IMPORT_TEMPLATE_FILE_NAME = "業務日報一括登録テンプレート.xlsx";
+
+function getReportImportHeaders() {
+  return [
+    { key: "date", label: "日付(date)" },
+    { key: "workType", label: "勤務形態(workType)" },
+    { key: "startTime", label: "開始時刻(startTime)" },
+    { key: "endTime", label: "終了時刻(endTime)" },
+    { key: "breakMinutes", label: "休憩分(breakMinutes)" },
+    { key: "taskType", label: "業務種類(taskType)" },
+    { key: "manHours", label: "工数(manHours)" },
+    { key: "transport", label: "交通費(transport)" },
+    { key: "bizId", label: "業務ID(bizId)" },
+    { key: "productId", label: "商品ID(productId)" },
+    { key: "serviceId", label: "サービスID(serviceId)" },
+    { key: "textCode", label: "テキストコード(textCode)" },
+    { key: "year", label: "年度(year)" },
+    { key: "content", label: "内容(content)" }
+  ];
+}
+
+function getReportImportDefaults() {
+  return {
+    date: ymd(new Date()),
+    workType: "出勤",
+    startTime: "",
+    endTime: "",
+    breakMinutes: "0",
+    taskType: getTaskTypes()[0] || "",
+    manHours: "1",
+    transport: "0",
+    bizId: "",
+    productId: "",
+    serviceId: "",
+    textCode: "",
+    year: "",
+    content: ""
+  };
+}
+
+function getReportImportTemplateOptionValues() {
+  return {
+    workTypeValues: ["出勤", "在宅"],
+    taskTypeValues: getTaskTypes(),
+    bizIdValues: typeof BIZ_IDS !== "undefined" ? BIZ_IDS : [],
+    productIdValues: typeof PRODUCT_IDS !== "undefined" ? PRODUCT_IDS : [],
+    serviceIdValues: typeof SERVICE_IDS !== "undefined" ? SERVICE_IDS : []
+  };
+}
+
+function buildReportImportTemplateRuleText() {
+  const defaults = getReportImportDefaults();
+  const options = getReportImportTemplateOptionValues();
+  return [
+    "1行目は説明、2行目は見出し、3行目以降にデータを入力してください。1ファイルは現在開いているスタッフ1名分として取り込みます。",
+    `必須: 日付 / 勤務形態 / 開始時刻 / 終了時刻。休憩分の既定値は ${defaults.breakMinutes} です。`,
+    "勤務形態が在宅の行は 業務種類 と 工数 を入れてください。出勤の行は交通費や各IDを必要に応じて入れてください。",
+    `勤務形態: ${options.workTypeValues.join(" / ")}`,
+    `業務種類候補: ${(options.taskTypeValues.join(" / ")) || "未設定"}`,
+    `業務ID候補: ${(options.bizIdValues.join(" / ")) || "未設定"}`,
+    `商品ID候補: ${(options.productIdValues.join(" / ")) || "未設定"}`,
+    `サービスID候補: ${(options.serviceIdValues.join(" / ")) || "未設定"}`
+  ].join("\n");
+}
+
+function buildReportImportTemplateSheetXml() {
+  const headers = getReportImportHeaders();
+  const lastCol = indexToTaskImportTemplateCol(headers.length - 1);
+  const colsXml = headers.map((_, index) => {
+    const width = index === headers.length - 1 ? 28 : 16;
+    return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`;
+  }).join("");
+  const headerCells = headers.map((header, index) =>
+    makeTaskImportTemplateCell(`${indexToTaskImportTemplateCol(index)}2`, header.label, 2)
+  ).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <dimension ref="A1:${lastCol}2"/>
+  <sheetViews>
+    <sheetView workbookViewId="0">
+      <pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>
+      <selection pane="bottomLeft" activeCell="A3" sqref="A3"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>${colsXml}</cols>
+  <sheetData>
+    <row r="1" ht="70" customHeight="1">${makeTaskImportTemplateCell("A1", buildReportImportTemplateRuleText(), 1)}</row>
+    <row r="2" ht="24" customHeight="1">${headerCells}</row>
+  </sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:${lastCol}1"/></mergeCells>
+</worksheet>`;
+}
+
+function buildReportImportTemplateBlob() {
+  const createdAt = new Date().toISOString();
+  const files = [
+    {
+      name: "[Content_Types].xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`
+    },
+    {
+      name: "_rels/.rels",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`
+    },
+    {
+      name: "docProps/app.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>業務管理アプリ</Application>
+</Properties>`
+    },
+    {
+      name: "docProps/core.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>業務日報一括登録テンプレート</dc:title>
+  <dc:creator>業務管理アプリ</dc:creator>
+  <cp:lastModifiedBy>業務管理アプリ</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:modified>
+</cp:coreProperties>`
+    },
+    {
+      name: "xl/workbook.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="業務日報一括登録" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`
+    },
+    { name: "xl/styles.xml", data: buildTaskImportTemplateStylesXml() },
+    { name: "xl/worksheets/sheet1.xml", data: buildReportImportTemplateSheetXml() }
+  ];
+  return createTaskImportTemplateZipBlob(files);
+}
+
+function normalizeReportImportHeader(header) {
+  return normalizeTaskImportHeader(header);
+}
+
+function excelSerialToYmd(value) {
+  const serial = Number(value);
+  if (!isFinite(serial) || serial <= 0) return "";
+  const utc = Date.UTC(1899, 11, 30) + Math.round(serial * 86400000);
+  const date = new Date(utc);
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
+function normalizeReportImportTimeValue(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const num = Number(raw);
+    if (isFinite(num)) {
+      const fraction = num >= 1 ? (num % 1) : num;
+      const totalMinutes = Math.round((((fraction % 1) + 1) % 1) * 24 * 60) % (24 * 60);
+      return `${pad2(Math.floor(totalMinutes / 60))}:${pad2(totalMinutes % 60)}`;
+    }
+  }
+  let match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (match) return `${pad2(parseInt(match[1], 10) || 0)}:${pad2(parseInt(match[2], 10) || 0)}`;
+  match = raw.match(/^(\d{1,2})(\d{2})$/);
+  if (match) return `${pad2(parseInt(match[1], 10) || 0)}:${pad2(parseInt(match[2], 10) || 0)}`;
+  match = raw.match(/^(\d{1,2})時(?:(\d{1,2})分?)?$/);
+  if (match) return `${pad2(parseInt(match[1], 10) || 0)}:${pad2(parseInt(match[2], 10) || 0)}`;
+  return raw;
+}
+
+function normalizeReportImportValue(key, value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  if (key === "date" && /^\d+(\.\d+)?$/.test(raw)) return excelSerialToYmd(raw);
+  if (key === "startTime" || key === "endTime") return normalizeReportImportTimeValue(raw);
+  if (key === "breakMinutes" || key === "manHours" || key === "transport") return raw.replace(/,/g, "");
+  return raw;
+}
+
+function findReportImportHeaderRowIndex(rows) {
+  const validHeaders = getReportImportHeaders().map(header => header.key);
+  let bestIndex = -1;
+  let bestCount = 0;
+  const limit = Math.min(rows.length, 10);
+  for (let i = 0; i < limit; i += 1) {
+    const headerMap = (rows[i] || []).map(normalizeReportImportHeader);
+    const matchedCount = headerMap.filter(key => validHeaders.indexOf(key) >= 0).length;
+    if (matchedCount > bestCount) {
+      bestCount = matchedCount;
+      bestIndex = i;
+    }
+  }
+  return bestCount >= 3 ? bestIndex : -1;
+}
+
+function calcImportedReportWorkTime(startTime, endTime, breakMinutes) {
+  const startMatch = String(startTime || "").match(/^(\d{2}):(\d{2})$/);
+  const endMatch = String(endTime || "").match(/^(\d{2}):(\d{2})$/);
+  if (!startMatch || !endMatch) return "";
+  const startTotal = (parseInt(startMatch[1], 10) || 0) * 60 + (parseInt(startMatch[2], 10) || 0);
+  const endTotal = (parseInt(endMatch[1], 10) || 0) * 60 + (parseInt(endMatch[2], 10) || 0);
+  const breakTotal = Math.max(0, parseInt(breakMinutes, 10) || 0);
+  const minutes = Math.max(0, endTotal - startTotal - breakTotal);
+  return `${Math.floor(minutes / 60)}h${minutes % 60 > 0 ? `${minutes % 60}m` : ""}`;
+}
+
+function buildImportedReport(record, defaults) {
+  const workType = record.workType === "在宅" ? "在宅" : (record.workType || defaults.workType);
+  const startTime = normalizeReportImportTimeValue(record.startTime || defaults.startTime);
+  const endTime = normalizeReportImportTimeValue(record.endTime || defaults.endTime);
+  const startParts = startTime.split(":");
+  const endParts = endTime.split(":");
+  const breakMinutes = String(record.breakMinutes || defaults.breakMinutes || "0");
+  const report = {
+    date: record.date || defaults.date,
+    workType,
+    startH: pad2(parseInt(startParts[0], 10) || 0),
+    startM: pad2(parseInt(startParts[1], 10) || 0),
+    endH: pad2(parseInt(endParts[0], 10) || 0),
+    endM: pad2(parseInt(endParts[1], 10) || 0),
+    breakTime: breakMinutes,
+    workTime: calcImportedReportWorkTime(startTime, endTime, breakMinutes),
+    content: record.content || defaults.content
+  };
+  if (workType === "在宅") {
+    report.taskType = record.taskType || defaults.taskType;
+    report.manHours = record.manHours || defaults.manHours;
+  } else {
+    report.transport = record.transport || defaults.transport;
+    report.bizId = record.bizId || defaults.bizId;
+    report.productId = record.productId || defaults.productId;
+    report.serviceId = record.serviceId || defaults.serviceId;
+    report.textCode = record.textCode || defaults.textCode;
+    report.year = record.year || defaults.year;
+  }
+  return report;
+}
+
+function convertImportRowsToReports(rows) {
+  if (!rows.length) return [];
+  const headerRowIndex = findReportImportHeaderRowIndex(rows);
+  if (headerRowIndex < 0) return [];
+  const headerMap = rows[headerRowIndex].map(normalizeReportImportHeader);
+  const defaults = getReportImportDefaults();
+  const reports = [];
+  const errors = [];
+
+  for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    const record = {};
+    headerMap.forEach((key, idx) => { record[key] = normalizeReportImportValue(key, (row && row[idx]) || ""); });
+    const hasAnyValue = Object.values(record).some(value => String(value || "").trim() !== "");
+    if (!hasAnyValue) continue;
+
+    const rowLabel = `${i + 1}行目`;
+    const workType = record.workType === "在宅" ? "在宅" : (record.workType || defaults.workType);
+    const startTime = normalizeReportImportTimeValue(record.startTime || defaults.startTime);
+    const endTime = normalizeReportImportTimeValue(record.endTime || defaults.endTime);
+    if (!record.date) {
+      errors.push(`${rowLabel}: 日付を入力してください`);
+      continue;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(record.date)) {
+      errors.push(`${rowLabel}: 日付は YYYY-MM-DD 形式で入力してください`);
+      continue;
+    }
+    if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) {
+      errors.push(`${rowLabel}: 開始時刻と終了時刻は HH:MM 形式で入力してください`);
+      continue;
+    }
+    if (workType === "在宅" && !(record.taskType || defaults.taskType)) {
+      errors.push(`${rowLabel}: 在宅の行は業務種類を入力してください`);
+      continue;
+    }
+    reports.push(buildImportedReport(record, defaults));
+  }
+
+  if (errors.length) throw new Error(errors.slice(0, 3).join(" / "));
+  return reports;
+}
+
+async function downloadReportImportTemplate() {
+  const blob = buildReportImportTemplateBlob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = REPORT_IMPORT_TEMPLATE_FILE_NAME;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function importReportsFromFile(file) {
+  if (!file) return;
+  const targetUserId = data.session.adminReportEditingUserId;
+  if (!targetUserId || !data.users[targetUserId]) {
+    showModal({ title: "取込先がありません", sub: "スタッフの日報詳細画面を開いてから実行してください", big: "NG" });
+    return;
+  }
+  const isXlsx = /\.xlsx$/i.test(String(file.name || ""));
+  const text = isXlsx ? "" : await file.text();
+  let imported = [];
+  try {
+    const rows = isXlsx ? await parseTaskImportRowsFromXlsx(file) : await parseTaskImportRows(text);
+    imported = convertImportRowsToReports(rows);
+  } catch (error) {
+    showModal({ title: "Excel取込できません", sub: (error && error.message) || "テンプレートの形式を確認してください", big: "NG" });
+    return;
+  }
+  if (!imported.length) {
+    const looksLikeExcelFrameset = !isXlsx && /WorksheetSource|ExcelWorkbook|sheet001\.htm|File-List/i.test(text);
+    const sub = looksLikeExcelFrameset
+      ? "この .xls は分割保存形式です。テンプレートから出力した .xlsx を使うか、.files 内の sheet001.htm を取り込んでください。"
+      : "テンプレートは1行目が説明、2行目が見出しです。3行目以降にデータを入れてください。";
+    showModal({ title: "Excel取込できません", sub, big: "NG" });
+    return;
+  }
+  await addReportsBatchRemote(targetUserId, imported);
+  renderAdminReportDetail();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+}
+
+function ensureReportImportControls() {
+  const exportBtn = $("ardExport");
+  const actions = exportBtn && exportBtn.parentNode;
+  if (!exportBtn || !actions) return;
+  if (!document.getElementById("ardDownloadTemplate")) {
+    const templateBtn = document.createElement("button");
+    templateBtn.id = "ardDownloadTemplate";
+    templateBtn.className = "btn ghost";
+    templateBtn.textContent = "テンプレート";
+    templateBtn.addEventListener("click", () => {
+      downloadReportImportTemplate().catch(error => handleDirectActionError(error, "テンプレート取得に失敗しました"));
+    });
+    actions.insertBefore(templateBtn, exportBtn);
+  }
+  if (!document.getElementById("ardImportExcel")) {
+    const importBtn = document.createElement("button");
+    importBtn.id = "ardImportExcel";
+    importBtn.className = "btn";
+    importBtn.textContent = "Excel取込";
+    importBtn.addEventListener("click", () => {
+      const input = document.getElementById("ardImportFile");
+      if (input) {
+        input.value = "";
+        input.click();
+      }
+    });
+    actions.insertBefore(importBtn, exportBtn);
+  }
+  if (!document.getElementById("ardImportFile")) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "ardImportFile";
+    input.accept = ".xlsx,.xls,.htm,.html,.csv,.tsv,.txt";
+    input.style.display = "none";
+    input.addEventListener("change", event => {
+      const file = event.target && event.target.files && event.target.files[0];
+      importReportsFromFile(file).catch(error => handleDirectActionError(error, "Excel取込に失敗しました"));
+    });
+    actions.appendChild(input);
+  }
+}
+
 /* === STAFF TASK LIST === */
 let stlInit=false;
 let stlPriceListOpen=false;
@@ -3457,6 +3844,7 @@ renderMonthCheck = function() {
 const _renderAdminReportDetailGlobalBase = renderAdminReportDetail;
 renderAdminReportDetail = function() {
   _renderAdminReportDetailGlobalBase();
+  ensureReportImportControls();
   renderAdminGlobalDashboard("adminReportDetail", "adminReportDetailNav", "report");
 };
 
