@@ -2293,6 +2293,17 @@ renderUserHome = function() {
   installStaffDirectBindings();
 };
 
+renderProgress = function(el,total) {
+  const nextTarget = getNextStampIncentiveTarget(total) || getNextMilestone(total);
+  const prevTarget = Math.max(0, total < nextTarget ? Math.max(0, nextTarget - (nextTarget <= 200 ? 25 : 50)) : total);
+  const range = Math.max(1, nextTarget - prevTarget);
+  const pct = Math.min(100, ((total - prevTarget) / range) * 100);
+  const currentInc = calcStampIncentive(total);
+  const nextInc = calcStampIncentive(nextTarget);
+  const bonus = nextInc - currentInc;
+  el.innerHTML = `<div class="progress-wrap"><div class="progress-label"><span>次の特典 ${nextTarget}pt</span><span>あと <b>${Math.max(0, nextTarget - total)}pt</b> / +${bonus.toLocaleString()}円</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+};
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", installStaffDirectBindings, { once: true });
 } else {

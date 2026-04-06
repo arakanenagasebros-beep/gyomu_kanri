@@ -207,12 +207,12 @@ if(lotteryTrigger){startLottery(p=>afterStamp(p))}else{afterStamp(0)}});
 
 function renderRankBadge(el,total){const r=getRank(total);el.innerHTML=`<span class="rank-badge rank-${r.rank}">${r.emoji} ${r.label}</span>`}
 function renderProgress(el,total){
-  const nextMile=getNextMilestone(total);
-  const prevMile=total<200?nextMile-25:nextMile-50;
-  const range=nextMile-prevMile;
-  const pct=range===0?100:Math.min(100,((total-prevMile)/range)*100);
+  const nextTarget=getNextStampIncentiveTarget(total)||getNextMilestone(total);
+  const prevTarget=Math.max(0,total<nextTarget?Math.max(0,nextTarget-(nextTarget<=200?25:50)):total);
+  const range=Math.max(1,nextTarget-prevTarget);
+  const pct=Math.min(100,((total-prevTarget)/range)*100);
   const currentInc=calcStampIncentive(total);
-  const nextInc=calcStampIncentive(nextMile);
+  const nextInc=calcStampIncentive(nextTarget);
   const bonus=nextInc-currentInc;
   el.innerHTML=`<div class="progress-wrap"><div class="progress-label"><span>次のｲﾝｾﾝﾃｨﾌﾞ ${nextMile}pt</span><span>あと <b>${nextMile-total}pt</b>（+${bonus.toLocaleString()}円）</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`}
 
@@ -2461,6 +2461,7 @@ function doRenderATL(){
 /* === DROPDOWN EDIT === */
 let ddEditIdx=-1;
 let ddEditType=""; // "taskType" or ""
+let ddStampRuleEditIdx=-1;
 function renderDropdownEdit(){
   renderAdminNotifications();
   renderAdminCreds();
@@ -2489,6 +2490,42 @@ function renderDropdownEdit(){
     const btns=div.querySelector(".dd-btns");
     const btn=document.createElement("button");btn.className="btn danger small";btn.textContent="削除";
     btn.addEventListener("click",()=>{if(!confirm(`「${data.employees[i]}」を削除しますか？`))return;data.employees.splice(i,1);saveData(data);renderDropdownEdit()});btns.appendChild(btn);eList.appendChild(div)});
+  const stampRuleList = $("ddStampIncentiveRuleList");
+  if (stampRuleList) {
+    stampRuleList.innerHTML = "";
+    getStampIncentiveRules().forEach((rule, i) => {
+      const div = document.createElement("div");
+      div.className = "dd-item";
+      div.innerHTML = `<div class="dd-info"><span>${escapeHtml(formatStampIncentiveRule(rule))}</span><div class="dd-price">累計 ${rule.every}pt ごと</div></div><div class="dd-btns"></div>`;
+      const btns = div.querySelector(".dd-btns");
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn small ghost";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", () => {
+        ddStampRuleEditIdx = i;
+        $("ddStampRuleEvery").value = String(rule.every);
+        $("ddStampRuleAmount").value = String(rule.amount);
+        $("ddStampRuleSave").textContent = "更新";
+      });
+      btns.appendChild(editBtn);
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn danger small";
+      deleteBtn.textContent = "削除";
+      deleteBtn.addEventListener("click", () => {
+        if (!confirm(`「${formatStampIncentiveRule(rule)}」を削除しますか？`)) return;
+        data.stampIncentiveRules = getStampIncentiveRules().filter((_, idx) => idx !== i);
+        saveData(data);
+        ddStampRuleEditIdx = -1;
+        $("ddStampRuleEvery").value = "";
+        $("ddStampRuleAmount").value = "";
+        $("ddStampRuleSave").textContent = "追加";
+        renderDropdownEdit();
+      });
+      btns.appendChild(deleteBtn);
+      stampRuleList.appendChild(div);
+    });
+  }
+  if ($("ddStampRuleSave") && ddStampRuleEditIdx < 0) $("ddStampRuleSave").textContent = "追加";
   // Staff list with full edit & delete
   const sList=$("ddStaffList");sList.innerHTML="";
   const addWrap=document.createElement("div");addWrap.style.marginBottom="10px";
@@ -2941,6 +2978,25 @@ $("ddEditSave").addEventListener("click",()=>{
 $("ddAddTaskType").addEventListener("click",()=>{const v=$("ddNewTaskType").value.trim();if(!v)return;data.taskTypes.push(v);const p=parseInt($("ddNewTaskPrice").value);if(!isNaN(p)){if(!data.taskPrices)data.taskPrices={};data.taskPrices[v]=p}saveData(data);$("ddNewTaskType").value="";$("ddNewTaskPrice").value="";renderDropdownEdit()});
 $("ddNewTaskPrice").addEventListener("input",function(){this.value=this.value.replace(/[^0-9]/g,"")});
 $("ddAddEmployee").addEventListener("click",()=>{const v=$("ddNewEmployee").value.trim();if(!v)return;data.employees.push(v);saveData(data);$("ddNewEmployee").value="";renderDropdownEdit()});
+if($("ddStampRuleSave"))$("ddStampRuleSave").addEventListener("click",()=>{
+  const every = Math.max(1, parseInt($("ddStampRuleEvery").value, 10) || 0);
+  const amount = Math.max(0, parseInt($("ddStampRuleAmount").value, 10) || 0);
+  if (!every || !amount) {
+    showModal({ title: "pt と金額を入力してください", big: "NG" });
+    return;
+  }
+  const nextRules = getStampIncentiveRules();
+  const nextRule = { every, amount };
+  if (ddStampRuleEditIdx >= 0 && nextRules[ddStampRuleEditIdx]) nextRules[ddStampRuleEditIdx] = nextRule;
+  else nextRules.push(nextRule);
+  data.stampIncentiveRules = normalizeStampIncentiveRules(nextRules);
+  ddStampRuleEditIdx = -1;
+  $("ddStampRuleEvery").value = "";
+  $("ddStampRuleAmount").value = "";
+  $("ddStampRuleSave").textContent = "追加";
+  saveData(data);
+  renderDropdownEdit();
+});
 
 /* === INIT === */
 
@@ -3354,6 +3410,24 @@ startEdit = function(td, u, oi, field) {
   });
 };
 
+let _adminEditVisualBaselineUserId = "";
+let _adminEditVisualBaselineHasPending = false;
+let _adminEditVisualBaselineStamps = null;
+
+function getAdminEditVisualBaseline(u, hasPending) {
+  if (!u) return null;
+  if (_adminEditVisualBaselineUserId !== u.id || _adminEditVisualBaselineHasPending !== hasPending || !_adminEditVisualBaselineStamps) {
+    _adminEditVisualBaselineUserId = u.id;
+    _adminEditVisualBaselineHasPending = hasPending;
+    _adminEditVisualBaselineStamps = cloneDeep((u && u.stamps) || {});
+  }
+  return _adminEditVisualBaselineStamps;
+}
+
+function buildStampIncentiveHelpText() {
+  return `<b>ランク</b>：R1(~50)300円/R2(~150)400円/R3(~300)500円/R4(~500)600円/R5(~800)700円/R6(801~)800円<br><b>ｲﾝｾﾝﾃｨﾌﾞ</b>：${escapeHtml(describeStampIncentiveRules() || "未設定")}<br><b>緊急</b>=3pt`;
+}
+
 renderAdminEdit = function() {
   const u = data.users[data.session.adminEditingUserId];
   if (!u) {
@@ -3381,6 +3455,7 @@ renderAdminEdit = function() {
   $("editMonthLabel").textContent = monthLabelJa(editMonthCursor);
 
   const hasPending = u.pendingStampRequest && u.pendingStampRequest.status === "pending";
+  const visualBaseline = getAdminEditVisualBaseline(u, hasPending);
   if (hasPending) {
     renderCalendar({
       mount: $("editCal"),
@@ -3420,9 +3495,14 @@ renderAdminEdit = function() {
         } catch (error) {
           handleDirectActionError(error, "スタンプ更新に失敗しました");
         }
-      }
+      },
+      pendingChanges: u.stamps,
+      originalStamps: visualBaseline
     });
   }
+
+  const helpEl = document.querySelector("#adminEdit .help");
+  if (helpEl) helpEl.innerHTML = buildStampIncentiveHelpText();
 
   let reqBar = document.getElementById("adminStampReqBar");
   if (!reqBar) {
@@ -3878,6 +3958,17 @@ const _renderAdminEditGlobalBase = renderAdminEdit;
 renderAdminEdit = function() {
   _renderAdminEditGlobalBase();
   renderAdminGlobalDashboard("adminEdit", "adminEditNav", "stamp");
+};
+
+renderProgress = function(el,total) {
+  const nextTarget = getNextStampIncentiveTarget(total) || getNextMilestone(total);
+  const prevTarget = Math.max(0, total < nextTarget ? Math.max(0, nextTarget - (nextTarget <= 200 ? 25 : 50)) : total);
+  const range = Math.max(1, nextTarget - prevTarget);
+  const pct = Math.min(100, ((total - prevTarget) / range) * 100);
+  const currentInc = calcStampIncentive(total);
+  const nextInc = calcStampIncentive(nextTarget);
+  const bonus = nextInc - currentInc;
+  el.innerHTML = `<div class="progress-wrap"><div class="progress-label"><span>次の特典 ${nextTarget}pt</span><span>あと <b>${Math.max(0, nextTarget - total)}pt</b> / +${bonus.toLocaleString()}円</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
 };
 
 if (document.readyState === "loading") {

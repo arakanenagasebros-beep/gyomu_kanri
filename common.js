@@ -13,6 +13,11 @@ const SYNC_VERSION_KEY = "stampcard_sync_version_v1";
 const LAST_SYNCED_KEY = "stampcard_last_synced_v1";
 const ACTION_QUEUE_KEY = "stampcard_action_queue_v1";
 const MAX_QUEUE_RETRY_DELAY_MS = 30000;
+const DEFAULT_STAMP_INCENTIVE_RULES = [
+  { every: 25, amount: 5000 },
+  { every: 50, amount: 5000 },
+  { every: 250, amount: 40000 }
+];
 let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
 localStorage.setItem(API_URL_KEY, API_URL);
 
@@ -161,6 +166,32 @@ function stripSensitiveFieldsFromData(clean) {
 
 function cloneForStorage(src) {
   return stripSensitiveFieldsFromData(JSON.parse(JSON.stringify(src || {})));
+}
+
+function normalizeStampIncentiveRules(rules) {
+  const source = Array.isArray(rules) ? rules : [];
+  const normalized = source.map(rule => ({
+    every: Math.max(1, parseInt(rule && rule.every, 10) || 0),
+    amount: Math.max(0, parseInt(rule && rule.amount, 10) || 0)
+  })).filter(rule => rule.every > 0 && rule.amount > 0);
+  if (!normalized.length) {
+    return DEFAULT_STAMP_INCENTIVE_RULES.map(rule => ({ every: rule.every, amount: rule.amount }));
+  }
+  normalized.sort((a, b) => a.every - b.every || a.amount - b.amount);
+  return normalized;
+}
+
+function getStampIncentiveRules() {
+  return normalizeStampIncentiveRules(data && data.stampIncentiveRules);
+}
+
+function formatStampIncentiveRule(rule) {
+  if (!rule) return "";
+  return `${rule.every}ptごとに${rule.amount.toLocaleString()}円`;
+}
+
+function describeStampIncentiveRules() {
+  return getStampIncentiveRules().map(formatStampIncentiveRule).join(" / ");
 }
 
 function serializeDataForSync(src) {
@@ -414,6 +445,7 @@ function migrateData() {
   if(!data.taskPrices)data.taskPrices={...TASK_PRICES};
   if(!data.userHourlyRates)data.userHourlyRates={};
   if(!data.staffWorkStatus)data.staffWorkStatus={};
+  data.stampIncentiveRules = normalizeStampIncentiveRules(data.stampIncentiveRules);
   if(!data.session)data.session={userId:"",adminAuthed:false,adminEditingUserId:"",adminReportEditingUserId:""};
   if(!data.session.adminReportEditingUserId)data.session.adminReportEditingUserId="";
   Object.keys(data.staffWorkStatus).forEach(key=>{const u=findUserByStaffRef(key);if(u&&u.id!==key&&data.staffWorkStatus[u.id]==null){data.staffWorkStatus[u.id]=data.staffWorkStatus[key];delete data.staffWorkStatus[key]}});
@@ -598,6 +630,7 @@ function saveData(d) {
   if (JSON.stringify(oldD.userHourlyRates) !== JSON.stringify(newD.userHourlyRates)) nextQueue.push({ action: "updateMaster", payload: { userHourlyRates: newD.userHourlyRates }, retryCount: 0, nextAttemptAt: 0 });
   if (JSON.stringify(oldD.staffWorkStatus) !== JSON.stringify(newD.staffWorkStatus)) nextQueue.push({ action: "updateMaster", payload: { staffWorkStatus: newD.staffWorkStatus }, retryCount: 0, nextAttemptAt: 0 });
   if (JSON.stringify(oldD.lockedMonths) !== JSON.stringify(newD.lockedMonths)) nextQueue.push({ action: "updateMaster", payload: { lockedMonths: newD.lockedMonths }, retryCount: 0, nextAttemptAt: 0 });
+  if (JSON.stringify(oldD.stampIncentiveRules) !== JSON.stringify(newD.stampIncentiveRules)) nextQueue.push({ action: "updateMaster", payload: { stampIncentiveRules: newD.stampIncentiveRules }, retryCount: 0, nextAttemptAt: 0 });
   if (JSON.stringify(oldD.notices) !== JSON.stringify(newD.notices)) nextQueue.push({ action: "updateMaster", payload: { notices: newD.notices }, retryCount: 0, nextAttemptAt: 0 });
 
   const deletedUids = Object.keys(oldUsers).filter(uid => !newUsers[uid]);
@@ -1068,7 +1101,7 @@ function loadData(){
   const users= {};
   const tasks=[];
   return{users,session:{userId:"",adminAuthed:false,adminEditingUserId:"",adminReportEditingUserId:""},
-    tasks,employees:[...DEFAULT_EMPLOYEES],taskTypes:[...DEFAULT_TASK_TYPES],taskPrices:{...TASK_PRICES},staffWorkStatus:{}};
+    tasks,employees:[...DEFAULT_EMPLOYEES],taskTypes:[...DEFAULT_TASK_TYPES],taskPrices:{...TASK_PRICES},staffWorkStatus:{},stampIncentiveRules:DEFAULT_STAMP_INCENTIVE_RULES.map(rule=>({ every: rule.every, amount: rule.amount }))};
 }
 var data=loadData();
 migrateData();
@@ -1223,7 +1256,8 @@ function countRange(u,d1,d2){let c=0;for(const k of Object.keys(u.stamps||{})){c
 function countRangeDays(u,d1,d2){let c=0;for(const k of Object.keys(u.stamps||{})){const d=new Date(k+"T00:00:00");if(between(d,d1,d2)&&u.stamps[k])c++;}return c}
 function countThisMonth(u,b){return countRange(u,startOfMonth(b),endOfMonth(b))}
 function countThisWeek(u,b){return countRange(u,startOfWeekMon(b),endOfWeekMon(b))}
-function calcStampIncentive(totalPt){let inc=0;inc+=Math.floor(totalPt/25)*5000;if(totalPt>=50){const s=Math.floor(totalPt/50);for(let i=1;i<=s;i++)inc+=(i*50)*100;}if(totalPt>=250){inc+=Math.floor((totalPt-200)/50)*40000;}return inc}
+function calcStampIncentive(totalPt){const total=Math.max(0,parseInt(totalPt,10)||0);let inc=0;getStampIncentiveRules().forEach(rule=>{inc+=Math.floor(total/rule.every)*rule.amount});return inc}
+function getNextStampIncentiveTarget(totalPt){const total=Math.max(0,parseInt(totalPt,10)||0);let nextTarget=null;getStampIncentiveRules().forEach(rule=>{const next=Math.ceil((total+1)/rule.every)*rule.every;if(!nextTarget||next<nextTarget)nextTarget=next});return nextTarget}
 function calcMonthInc(u,mk){const total=countTotal(u);const rank=getRank(total);const d=new Date(mk+"-01");return countRange(u,startOfMonth(d),endOfMonth(d))*rank.yen}
 function getMonthlyComment(c){for(const m of MONTHLY_COMMENTS)if(c>=m.min&&c<=m.max)return m.msg;return MONTHLY_COMMENTS[4].msg}
 function calcReportSalary(r,userId){const hr=userId?getUserHourlyRate(userId):HOURLY_RATE;if(r.workType==="在宅"){const tp=r.taskType||"";const price=getTaskPrice(tp);if(tp==="時給"||tp==="その他（時給）")return calcWorkMinutes(r)/60*hr;if(price!=null)return price*(parseInt(r.manHours)||1);return 0;}return Math.round(calcWorkMinutes(r)/60*hr)}
