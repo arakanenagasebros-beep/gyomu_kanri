@@ -579,12 +579,12 @@ else td.textContent=c;tr.appendChild(td)});
 const tdReq=document.createElement("td");
 if(u.pendingStampRequest&&u.pendingStampRequest.status==="pending"){
   const reqBadge=document.createElement("span");reqBadge.className="stamp-request-badge";reqBadge.style.cssText="font-size:9px;cursor:pointer;";reqBadge.textContent="📨 申請中";
-  reqBadge.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+reqBadge.addEventListener("click",()=>{resetAdminEditVisualBaseline();data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
   tdReq.appendChild(reqBadge);
 } else {tdReq.textContent="―"}
 tr.appendChild(tdReq);
 const tdE=document.createElement("td");const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="編集";
-btn.addEventListener("click",()=>{data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
+btn.addEventListener("click",()=>{resetAdminEditVisualBaseline();data.session.adminEditingUserId=u.id;saveLocalOnly(data);editMonthCursor=startOfMonth(new Date());location.hash="#admin-edit"});
 tdE.appendChild(btn);tr.appendChild(tdE);tb.appendChild(tr)});$("adminMeta").textContent=`${users.length}名`}
 
 /* === ADMIN EDIT === */
@@ -592,7 +592,7 @@ let editMonthCursor=startOfMonth(new Date());
 $("ePrev").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,-1);renderAdminEdit()});
 $("eNext").addEventListener("click",()=>{editMonthCursor=addMonths(editMonthCursor,+1);renderAdminEdit()});
 $("eThis").addEventListener("click",()=>{editMonthCursor=startOfMonth(new Date());renderAdminEdit()});
-$("backToAdminHome").addEventListener("click",()=>{data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
+$("backToAdminHome").addEventListener("click",()=>{resetAdminEditVisualBaseline();data.session.adminEditingUserId="";saveLocalOnly(data);location.hash="#admin"});
 if($("resetThisUser"))$("resetThisUser").addEventListener("click",()=>{const u=data.users[data.session.adminEditingUserId];if(!u)return;if(!confirm(`${u.name||u.id}を初期化？`))return;u.stamps={};u.incentives={};u.bonusPoints=0;u.lastCongrats50=0;u.lastMonthFirstStamp="";u.reports=[];u.proofingIncentives={};delete u.stampScreenVisitedToday;delete u.stampFailed;saveData(data);renderAdminEdit();showModal({title:"初期化完了",big:"🧼"})});
 $("btnSaveUserInfo").addEventListener("click", async ()=>{
   const oldId=data.session.adminEditingUserId;const u=data.users[oldId];if(!u)return;
@@ -3413,6 +3413,12 @@ startEdit = function(td, u, oi, field) {
 let _adminEditVisualBaselineUserId = "";
 let _adminEditVisualBaselineHasPending = false;
 let _adminEditVisualBaselineStamps = null;
+
+function resetAdminEditVisualBaseline() {
+  _adminEditVisualBaselineUserId = "";
+  _adminEditVisualBaselineHasPending = false;
+  _adminEditVisualBaselineStamps = null;
+}
 
 function getAdminEditVisualBaseline(u, hasPending) {
   if (!u) return null;
