@@ -7,6 +7,7 @@
   --grad3:linear-gradient(135deg,#9b59b6,#4d96ff);
   --r:16px;--r2:24px;
   --sync-badge-clearance:120px;
+  --admin-fixed-width:980px;
   --font-display:'Fredoka','Zen Maru Gothic',sans-serif;
   --font-body:'Zen Maru Gothic',sans-serif;
   --font-main:'Zen Maru Gothic',sans-serif;
@@ -23,7 +24,13 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   radial-gradient(400px circle at 70% 60%,rgba(77,150,255,.06),transparent);}
 .wrap{max-width:1200px;margin:0 auto;padding:16px 14px 24px;position:relative;z-index:1;}
 .wrap > section:not(.hidden)::after{content:"";display:block;height:var(--sync-badge-clearance);}
-.wrap > :where(#adminHome,#adminMonthCheck) > *{width:100%;max-width:1200px;margin-left:auto;margin-right:auto;}
+.wrap > :where(#adminHome,#adminMonthCheck):not(.hidden){display:flex;flex-direction:column;align-items:center;}
+.wrap > :where(#adminHome,#adminMonthCheck):not(.hidden) > :where(.topbar,.admin-tabs,.dash-shell,.admin-notification,.card){
+  width:100%;
+  max-width:var(--admin-fixed-width);
+  margin-left:auto;
+  margin-right:auto;
+}
 .hidden{display:none !important;}
 a{color:inherit;}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -180,11 +187,11 @@ textarea{resize:vertical;min-height:80px;}
 .lottery-card.disabled{opacity:.4;cursor:default;}
 .lottery-result{font-family:var(--font-display);font-size:18px;font-weight:700;color:#ffd93d;margin:10px 0;min-height:28px;}
 .lottery-close{margin-top:10px;padding:10px 30px;border-radius:14px;border:2px solid rgba(255,215,61,.3);background:linear-gradient(135deg,#ffd93d,#ff9a56);color:#2d1b4e;font-weight:900;font-size:14px;font-family:var(--font-display);cursor:pointer;}
-.overlay{position:fixed;inset:0;display:none;background:rgba(45,27,78,.5);backdrop-filter:blur(6px);z-index:50;padding:18px;}
-.modal{max-width:500px;margin:10vh auto 0;border-radius:24px;border:2px solid rgba(255,107,157,.15);background:rgba(255,255,255,.95);box-shadow:0 20px 60px rgba(255,107,157,.18);overflow:hidden;}
+.overlay{position:fixed;inset:0;display:none;justify-content:center;align-items:flex-start;overflow-y:auto;background:rgba(45,27,78,.5);backdrop-filter:blur(6px);z-index:50;padding:18px;}
+.modal{width:min(100%,calc(100vw - 36px));max-width:500px;max-height:calc(100vh - 36px);margin:24px auto;border-radius:24px;border:2px solid rgba(255,107,157,.15);background:rgba(255,255,255,.95);box-shadow:0 20px 60px rgba(255,107,157,.18);overflow:hidden;display:flex;flex-direction:column;}
 .mh{padding:16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:2px solid rgba(255,107,157,.08);}
 .mh h3{font-size:16px;font-family:var(--font-display);}
-.mb{padding:16px;}
+.mb{padding:16px;overflow-y:auto;}
 .mb p{color:var(--muted);line-height:1.8;font-size:13px;white-space:pre-line;}
 .celebrate{margin-top:14px;padding:16px;border-radius:20px;border:2px solid rgba(255,107,157,.10);background:linear-gradient(135deg,rgba(255,248,240,.9),rgba(255,243,224,.8));text-align:center;}
 .celebrate .big{font-size:32px;font-family:var(--font-display);font-weight:900;}
@@ -300,11 +307,11 @@ td.editing textarea{min-height:40px;resize:vertical;}
 .price-list-grid{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:12px;}
 .price-list-grid .pl-name{font-weight:700;color:var(--text);}
 .price-list-grid .pl-price{font-weight:900;color:var(--orange);text-align:right;font-family:var(--font-display);}
-.dd-edit-overlay{position:fixed;inset:0;display:none;background:rgba(45,27,78,.5);backdrop-filter:blur(6px);z-index:55;padding:18px;}
-.dd-edit-modal{max-width:400px;margin:15vh auto 0;border-radius:24px;border:2px solid rgba(255,107,157,.15);background:rgba(255,255,255,.95);box-shadow:0 20px 60px rgba(255,107,157,.18);overflow:hidden;}
+.dd-edit-overlay{position:fixed;inset:0;display:none;justify-content:center;align-items:flex-start;overflow-y:auto;background:rgba(45,27,78,.5);backdrop-filter:blur(6px);z-index:55;padding:18px;}
+.dd-edit-modal{width:min(100%,calc(100vw - 36px));max-width:400px;max-height:calc(100vh - 36px);margin:24px auto;border-radius:24px;border:2px solid rgba(255,107,157,.15);background:rgba(255,255,255,.95);box-shadow:0 20px 60px rgba(255,107,157,.18);overflow:hidden;display:flex;flex-direction:column;}
 .dd-edit-modal .mh{padding:16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:2px solid rgba(255,107,157,.08);}
 .dd-edit-modal .mh h3{font-size:16px;font-family:var(--font-display);}
-.dd-edit-modal .mb{padding:16px;}
+.dd-edit-modal .mb{padding:16px;overflow-y:auto;}
 .admin-request-info{padding:10px 14px;border-radius:14px;background:rgba(255,154,86,.08);border:2px solid rgba(255,154,86,.15);margin-bottom:10px;}
 .admin-request-info .ari-title{font-family:var(--font-display);font-size:13px;font-weight:700;color:var(--orange);margin-bottom:6px;}
 .admin-notification{padding:10px 16px;border-radius:14px;background:linear-gradient(135deg,rgba(107,203,119,.12),rgba(77,150,255,.08));border:2px solid rgba(107,203,119,.2);margin-bottom:12px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--text);}
@@ -348,7 +355,7 @@ td.editing textarea{min-height:40px;resize:vertical;}
 
 /* === Overlay for API Setup / Staff Edit === */
 #apiSetupOverlay,#staffEditOverlay{
-  display:none;position:fixed;inset:0;
+  display:none;position:fixed;inset:0;justify-content:center;align-items:flex-start;overflow-y:auto;
   background:rgba(45,27,78,.5);backdrop-filter:blur(6px);z-index:1002;
   padding:18px;
 }
