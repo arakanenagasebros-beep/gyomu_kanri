@@ -23,6 +23,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   radial-gradient(400px circle at 70% 60%,rgba(77,150,255,.06),transparent);}
 .wrap{max-width:1200px;margin:0 auto;padding:16px 14px 24px;position:relative;z-index:1;}
 .wrap > section:not(.hidden)::after{content:"";display:block;height:var(--sync-badge-clearance);}
+.wrap > :where(#adminHome,#adminMonthCheck) > *{width:100%;max-width:1200px;margin-left:auto;margin-right:auto;}
 .hidden{display:none !important;}
 a{color:inherit;}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
