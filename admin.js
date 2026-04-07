@@ -4050,7 +4050,7 @@ renderAdminTaskList = function() {
 };
 
 let mcLatestInit = false;
-const monthCheckViewState = { tab: "summary", attendanceStaff: "全て", taskStaff: "全て", taskStatus: "全て", guideOpen: false };
+const monthCheckViewState = { tab: "summary", attendanceStaff: "全て", taskStaff: "全て", taskStatus: "全て", taskMatchStatus: "全て", guideOpen: false };
 
 function getMonthCheckTabMeta(tab) {
   if (tab === "attendance") {
@@ -4062,12 +4062,12 @@ function getMonthCheckTabMeta(tab) {
   if (tab === "task") {
     return {
       title: "在宅詳細",
-      sub: "在宅業務の一覧を年月・スタッフ・状況で確認します"
+      sub: "在宅業務の一覧を年月・スタッフ・状況・状態で確認します"
     };
   }
   return {
     title: "月末チェック一覧",
-    sub: "在宅業務の日報と業務管理の工数照合"
+    sub: "対象月の在宅業務と在宅日報の工数を照合します"
   };
 }
 
@@ -4079,6 +4079,103 @@ function renderMonthCheckHeader(tab) {
   const meta = getMonthCheckTabMeta(tab);
   if (titleEl) titleEl.textContent = meta.title;
   if (subEl) subEl.textContent = meta.sub;
+}
+
+function getMonthCheckMonthKeyFromDate(value) {
+  if (!value) return "";
+  const match = String(value).match(/^(\d{4})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}` : "";
+}
+
+function normalizeMonthCheckTaskStatus(status) {
+  if (status === "依頼済") return "依頼中";
+  if (status === "完了済") return "完了";
+  return String(status || "");
+}
+
+function isMonthCheckTargetTask(task, y, m) {
+  if (!task || task.workType !== "在宅") return false;
+  const normalizedStatus = normalizeMonthCheckTaskStatus(task.status);
+  if (!["依頼中", "完了", "期限超過"].includes(normalizedStatus)) return false;
+  return getMonthCheckMonthKeyFromDate(task.deadline) === getMonthCheckLockKey(y, m);
+}
+
+function getMonthCheckTaskOwner(task) {
+  const userId = getTaskStaffUserId(task);
+  const user = (data.users || {})[userId] || findUserByStaffRef(task.staff);
+  const resolvedUserId = user ? String(user.id || "") : String(userId || "");
+  const userName = user ? getUserDisplayName(user) : String(task.staff || "");
+  return {
+    user,
+    userId: resolvedUserId,
+    userName,
+    ownerKey: resolvedUserId ? `id:${resolvedUserId}` : `staff:${userName}`
+  };
+}
+
+function getMonthCheckTargetTasks(y, m) {
+  return (data.tasks || [])
+    .filter(task => isMonthCheckTargetTask(task, y, m))
+    .map(task => {
+      const owner = getMonthCheckTaskOwner(task);
+      return {
+        task,
+        user: owner.user,
+        userId: owner.userId,
+        userName: owner.userName,
+        ownerKey: owner.ownerKey
+      };
+    });
+}
+
+function getMonthCheckReportHoursByType(user, y, m) {
+  const totals = {};
+  if (!user) return totals;
+  filterReports(user.reports, String(y), String(m), "在宅").forEach(report => {
+    const taskType = report.taskType || "不明";
+    totals[taskType] = (totals[taskType] || 0) + (Number(report.manHours) || 0);
+  });
+  return totals;
+}
+
+function getMonthCheckMatchResultForUser(user, y, m) {
+  const reportByType = getMonthCheckReportHoursByType(user, y, m);
+  const taskByType = {};
+  getMonthCheckTargetTasks(y, m)
+    .filter(entry => String(entry.userId || "") === String(user.id || ""))
+    .forEach(entry => {
+      const taskType = entry.task.taskType || "不明";
+      taskByType[taskType] = (taskByType[taskType] || 0) + (Number(entry.task.manHours) || 0);
+    });
+  const allTypes = new Set([...Object.keys(reportByType), ...Object.keys(taskByType)]);
+  let hasShortage = false;
+  let hasExcess = false;
+  const details = [];
+  allTypes.forEach(taskType => {
+    const reportHours = reportByType[taskType] || 0;
+    const taskHours = taskByType[taskType] || 0;
+    let status = "一致";
+    if (reportHours < taskHours) {
+      status = "日報不足";
+      hasShortage = true;
+    } else if (reportHours > taskHours) {
+      status = "業務過多";
+      hasExcess = true;
+    }
+    details.push({ taskType, reportHours, taskHours, status });
+  });
+  let status = "一致";
+  if (hasShortage && hasExcess) status = "双方不一致";
+  else if (hasShortage) status = "日報不足";
+  else if (hasExcess) status = "業務過多";
+  return { status, details };
+}
+
+function getMonthCheckStatusColor(status) {
+  if (status === "一致") return "var(--mint)";
+  if (status === "日報不足") return "var(--blue)";
+  if (status === "双方不一致") return "var(--red)";
+  return "var(--orange)";
 }
 
 function getMonthCheckLockKey(y, m) {
@@ -4101,7 +4198,7 @@ function getMonthCheckSummaryRows(y, m) {
     return {
       index: index + 1,
       user,
-      result: checkUserMatch(user, y, m),
+      result: getMonthCheckMatchResultForUser(user, y, m),
       hasStampReq: !!(user.pendingStampRequest && user.pendingStampRequest.status === "pending"),
       workDays,
       incentiveCount,
@@ -4132,25 +4229,64 @@ function getMonthCheckAttendanceRows(y, m, staffId) {
   return rows.sort((a, b) => a.userName.localeCompare(b.userName, "ja") || a.date.localeCompare(b.date));
 }
 
-function getMonthCheckTaskRows(y, m, staffId, status) {
-  return (data.tasks || [])
-    .filter(task => getMonthLockKey(task.requestDate) === getMonthCheckLockKey(y, m))
-    .filter(task => !staffId || staffId === "全て" || getTaskStaffUserId(task) === String(staffId))
-    .filter(task => !status || status === "全て" || String(task.status || "") === String(status))
-    .map(task => {
-      const userId = getTaskStaffUserId(task);
-      const user = (data.users || {})[userId] || findUserByStaffRef(task.staff);
-      return {
-        userId: userId || "",
-        userName: user ? getUserDisplayName(user) : (task.staff || ""),
-        status: task.status || "",
-        completionDate: task.completionDate || "",
-        taskType: task.taskType || "",
-        manHours: task.manHours || "",
-        validPointCount: task.validPointCount || 0
+function getMonthCheckTaskRows(y, m, staffId, status, matchStatus) {
+  const rows = [];
+  const grouped = {};
+
+  getMonthCheckTargetTasks(y, m).forEach(entry => {
+    const groupKey = `${entry.ownerKey}__${entry.task.taskType || "不明"}`;
+    if (!grouped[groupKey]) grouped[groupKey] = [];
+    grouped[groupKey].push(entry);
+  });
+
+  Object.keys(grouped).forEach(groupKey => {
+    const group = grouped[groupKey].sort((a, b) =>
+      String(a.task.deadline || "").localeCompare(String(b.task.deadline || "")) ||
+      String(a.task.requestDate || "").localeCompare(String(b.task.requestDate || "")) ||
+      String(a.task.completionDate || "").localeCompare(String(b.task.completionDate || "")) ||
+      String(a.task.seqNum || "").localeCompare(String(b.task.seqNum || "")) ||
+      String(a.task.id || "").localeCompare(String(b.task.id || ""))
+    );
+    const base = group[0];
+    let remainingReportHours = base.user ? (getMonthCheckReportHoursByType(base.user, y, m)[base.task.taskType || "不明"] || 0) : 0;
+    group.forEach(entry => {
+      const taskHours = Number(entry.task.manHours) || 0;
+      const coveredHours = Math.min(Math.max(remainingReportHours, 0), taskHours);
+      const row = {
+        ownerKey: entry.ownerKey,
+        userId: entry.userId || "",
+        userName: entry.userName || "",
+        taskStatus: entry.task.status || "",
+        matchStatus: coveredHours < taskHours ? "日報不足" : "一致",
+        completionDate: entry.task.completionDate || "",
+        taskType: entry.task.taskType || "不明",
+        manHours: taskHours,
+        validPointCount: entry.task.validPointCount || 0
       };
-    })
-    .sort((a, b) => a.userName.localeCompare(b.userName, "ja") || a.taskType.localeCompare(b.taskType, "ja"));
+      remainingReportHours = Math.max(remainingReportHours - taskHours, 0);
+      rows.push(row);
+    });
+    if (remainingReportHours > 0 && rows.length) {
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        if (rows[i].ownerKey === base.ownerKey && rows[i].taskType === (base.task.taskType || "不明")) {
+          rows[i].matchStatus = "業務過多";
+          break;
+        }
+      }
+    }
+  });
+
+  return rows
+    .filter(row => !staffId || staffId === "全て" || String(row.userId || "") === String(staffId))
+    .filter(row => !status || status === "全て" || normalizeMonthCheckTaskStatus(row.taskStatus) === String(status))
+    .filter(row => !matchStatus || matchStatus === "全て" || row.matchStatus === String(matchStatus))
+    .sort((a, b) =>
+      a.userName.localeCompare(b.userName, "ja") ||
+      a.taskStatus.localeCompare(b.taskStatus, "ja") ||
+      a.matchStatus.localeCompare(b.matchStatus, "ja") ||
+      a.taskType.localeCompare(b.taskType, "ja") ||
+      a.completionDate.localeCompare(b.completionDate)
+    );
 }
 
 function renderMonthCheckGuide(container) {
@@ -4167,7 +4303,7 @@ function renderMonthCheckGuide(container) {
   if (monthCheckViewState.guideOpen) {
     const panel = document.createElement("div");
     panel.style.cssText = "margin-top:10px;padding:12px;border-radius:12px;background:rgba(255,255,255,.75);border:1px solid rgba(0,0,0,.08);";
-    panel.innerHTML = "<div style='font-weight:900;margin-bottom:6px;'>状態仕様</div><div style='font-size:12px;color:var(--muted);line-height:1.7;'>一致: 在宅日報の工数と業務管理の工数が一致している状態です。<br>業務過多: 日報工数が業務管理より多い状態です。<br>日報不足: 日報工数が業務管理より少ない状態です。</div>";
+    panel.innerHTML = "<div style='font-weight:900;margin-bottom:6px;'>状態仕様</div><div style='font-size:12px;color:var(--muted);line-height:1.7;'>対象は、業務形態が在宅で、状況が依頼中・完了・期限超過のいずれか、かつ期限日が対象月内の業務です。<br>一致: 在宅日報の工数と業務管理の工数が一致している状態です。<br>業務過多: 日報工数が業務管理より多い状態です。<br>日報不足: 日報工数が業務管理より少ない状態です。</div>";
     wrap.appendChild(panel);
   }
   container.appendChild(wrap);
@@ -4267,7 +4403,7 @@ function renderMonthCheckExtraPanel(y, m, summaryRows) {
 
   const filter = document.createElement("div");
   filter.className = "filter-bar";
-  filter.innerHTML = `<div class="fg"><label>スタッフ名</label><select id="mcTaskStaff"></select></div><div class="fg"><label>状況</label><select id="mcTaskStatus"><option value="全て">全て</option><option value="依頼前">依頼前</option><option value="依頼中">依頼中</option><option value="期限超過">期限超過</option><option value="完了">完了</option></select></div>`;
+  filter.innerHTML = `<div class="fg"><label>スタッフ名</label><select id="mcTaskStaff"></select></div><div class="fg"><label>状況</label><select id="mcTaskStatus"><option value="全て">全て</option><option value="依頼中">依頼中</option><option value="期限超過">期限超過</option><option value="完了">完了</option></select></div><div class="fg"><label>状態</label><select id="mcTaskMatchStatus"><option value="全て">全て</option><option value="一致">一致</option><option value="業務過多">業務過多</option><option value="日報不足">日報不足</option></select></div>`;
   area.appendChild(filter);
   const taskStaff = document.getElementById("mcTaskStaff");
   taskStaff.innerHTML = "<option value='全て'>全て</option>";
@@ -4286,6 +4422,12 @@ function renderMonthCheckExtraPanel(y, m, summaryRows) {
   taskStatus.value = monthCheckViewState.taskStatus;
   taskStatus.addEventListener("change", () => {
     monthCheckViewState.taskStatus = taskStatus.value;
+    renderMonthCheck();
+  });
+  const taskMatchStatus = document.getElementById("mcTaskMatchStatus");
+  taskMatchStatus.value = monthCheckViewState.taskMatchStatus;
+  taskMatchStatus.addEventListener("change", () => {
+    monthCheckViewState.taskMatchStatus = taskMatchStatus.value;
     renderMonthCheck();
   });
 }
@@ -4315,15 +4457,23 @@ function renderMonthCheckMainTable(y, m, summaryRows, locked) {
   }
 
   if (monthCheckViewState.tab === "task") {
-    const rows = getMonthCheckTaskRows(y, m, monthCheckViewState.taskStaff, monthCheckViewState.taskStatus);
-    $("mcThead").innerHTML = `<tr><th>スタッフID</th><th>スタッフ名</th><th>状況</th><th>完了日</th><th>業務種類</th><th>工数</th><th>有効指摘回数</th></tr>`;
+    const rows = getMonthCheckTaskRows(y, m, monthCheckViewState.taskStaff, monthCheckViewState.taskStatus, monthCheckViewState.taskMatchStatus);
+    $("mcThead").innerHTML = `<tr><th>スタッフID</th><th>スタッフ名</th><th>状況</th><th>状態</th><th>完了日</th><th>業務種類</th><th>工数</th><th>有効指摘回数</th></tr>`;
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
       return;
     }
     rows.forEach(row => {
       const tr = document.createElement("tr");
-      [row.userId, row.userName, row.status, row.completionDate, row.taskType, String(row.manHours), String(row.validPointCount)].forEach(value => {
+      [row.userId, row.userName, row.taskStatus].forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      const stateTd = document.createElement("td");
+      stateTd.innerHTML = `<span style="color:${getMonthCheckStatusColor(row.matchStatus)};font-weight:900;">${escapeHtml(row.matchStatus)}</span>`;
+      tr.appendChild(stateTd);
+      [row.completionDate, row.taskType, String(row.manHours), String(row.validPointCount)].forEach(value => {
         const td = document.createElement("td");
         td.textContent = value;
         tr.appendChild(td);
@@ -4340,7 +4490,7 @@ function renderMonthCheckMainTable(y, m, summaryRows, locked) {
   }
   summaryRows.forEach(row => {
     const tr = document.createElement("tr");
-    const statusColor = row.result.status === "一致" ? "var(--mint)" : (row.result.status === "日報不足" ? "var(--blue)" : "var(--orange)");
+    const statusColor = getMonthCheckStatusColor(row.result.status);
     const values = [
       String(row.index),
       row.user.id || "",

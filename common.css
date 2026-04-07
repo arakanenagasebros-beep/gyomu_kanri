@@ -6,6 +6,7 @@
   --grad2:linear-gradient(135deg,#6bcb77,#4d96ff);
   --grad3:linear-gradient(135deg,#9b59b6,#4d96ff);
   --r:16px;--r2:24px;
+  --sync-badge-clearance:120px;
   --font-display:'Fredoka','Zen Maru Gothic',sans-serif;
   --font-body:'Zen Maru Gothic',sans-serif;
   --font-main:'Zen Maru Gothic',sans-serif;
@@ -14,13 +15,13 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
-body{font-family:var(--font-body);color:var(--text);background:var(--bg);overflow-x:hidden;}
+body{font-family:var(--font-body);color:var(--text);background:var(--bg);overflow-x:hidden;padding-bottom:var(--sync-badge-clearance);}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(600px circle at 10% 20%,rgba(255,107,157,.12),transparent),
   radial-gradient(500px circle at 85% 15%,rgba(255,154,86,.10),transparent),
   radial-gradient(700px circle at 50% 80%,rgba(107,203,119,.08),transparent),
   radial-gradient(400px circle at 70% 60%,rgba(77,150,255,.06),transparent);}
-.wrap{max-width:1200px;margin:0 auto;padding:16px 14px 100px;position:relative;z-index:1;}
+.wrap{max-width:1200px;margin:0 auto;min-height:100%;padding:16px 14px calc(var(--sync-badge-clearance) + 24px);position:relative;z-index:1;}
 .hidden{display:none !important;}
 a{color:inherit;}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -314,6 +315,7 @@ td.editing textarea{min-height:40px;resize:vertical;}
   position: fixed;
   bottom: 16px;
   left: 16px;
+  max-width: calc(100vw - 32px);
   z-index: 9999;
   padding: 8px 14px;
   border-radius: 999px;
@@ -336,6 +338,11 @@ td.editing textarea{min-height:40px;resize:vertical;}
 .sync-dot.err { background: #ff4757; }
 .sync-dot.loading { background: #4d96ff; animation: syncPulse 1s infinite; }
 @keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+@media(max-width:640px){
+  :root{--sync-badge-clearance:132px;}
+  .sync-badge{left:12px;right:12px;bottom:12px;}
+}
 
 /* === Overlay for API Setup / Staff Edit === */
 #apiSetupOverlay,#staffEditOverlay{
