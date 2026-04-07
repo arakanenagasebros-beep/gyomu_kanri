@@ -547,6 +547,10 @@ async function processQueue() {
       }
     } else if (result.error === "version_conflict") {
       await handleQueueVersionConflict();
+    } else if (result.error === "locked_month") {
+      actionQueue.shift();
+      persistActionQueue();
+      showModal({ title: "確定済みの月です", sub: "この操作は月次確定後のため実行できません", big: "NG" });
     } else {
       scheduleQueueRetry(req, result.error || "同期エラー");
     }
@@ -1012,15 +1016,20 @@ async function changeOwnStaffPasswordRemote(currentPw, newPw) {
 }
 
 function buildReportPayloadFromForm(transportValueOverride) {
+  const digitsOnly = value => String(value == null ? "" : value).replace(/[^0-9]/g, "");
+  const padTime = (value, max) => {
+    const num = Math.max(0, Math.min(max, parseInt(digitsOnly(value), 10) || 0));
+    return pad2(num);
+  };
   const wt = $("rpWorkType").value;
   const report = {
     date: $("rpDate").value,
     workType: wt,
-    startH: $("rpStartH").value,
-    startM: $("rpStartM").value,
-    endH: $("rpEndH").value,
-    endM: $("rpEndM").value,
-    breakTime: $("rpBreak").value,
+    startH: padTime($("rpStartH").value, 23),
+    startM: padTime($("rpStartM").value, 59),
+    endH: padTime($("rpEndH").value, 23),
+    endM: padTime($("rpEndM").value, 59),
+    breakTime: digitsOnly($("rpBreak").value),
     workTime: $("rpWorkTime").value,
     content: $("rpContent").value
   };
@@ -1264,6 +1273,17 @@ function calcReportSalary(r,userId){const hr=userId?getUserHourlyRate(userId):HO
 function calcWorkMinutes(r){const sh=parseInt(r.startH)||0,sm=parseInt(r.startM)||0,eh=parseInt(r.endH)||0,em=parseInt(r.endM)||0;const brk=parseInt(r.breakTime)||0;let d=(eh*60+em)-(sh*60+sm)-brk;return d<0?0:d}
 function getUserDateRange(u){let mn=null,mx=null;(u.reports||[]).forEach(r=>{if(!r.date)return;const d=new Date(r.date+"T00:00:00");if(!mn||d<mn)mn=d;if(!mx||d>mx)mx=d;});if(!mn){const n=new Date();mn=n;mx=n;}return{min:mn,max:mx}}
 function getAllUsersDateRange(){let mn=null,mx=null;Object.values(data.users).forEach(u=>{(u.reports||[]).forEach(r=>{if(!r.date)return;const d=new Date(r.date+"T00:00:00");if(!mn||d<mn)mn=d;if(!mx||d>mx)mx=d;});});if(!mn){const n=new Date();mn=n;mx=n;}return{min:mn,max:mx}}
+function getMonthLockKey(value){
+  if(!value)return"";
+  const text=String(value);
+  if(/^\d{4}-\d{2}$/.test(text))return text;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(text))return text.slice(0,7);
+  return"";
+}
+function isLockedMonth(value){
+  const key=getMonthLockKey(value);
+  return !!(key&&data.lockedMonths&&data.lockedMonths[key]);
+}
 function buildYearMonthOpts(ySel,mSel,dr,def){const now=new Date();const minY=dr.min.getFullYear();const maxY=Math.max(dr.max.getFullYear(),now.getFullYear())+1;
   ySel.innerHTML="";const a=document.createElement("option");a.value="全て";a.textContent="全て";ySel.appendChild(a);for(let y=minY;y<=maxY;y++){const o=document.createElement("option");o.value=y;o.textContent=y+"年";ySel.appendChild(o);}if(def)ySel.value=String(now.getFullYear());
   mSel.innerHTML="";const b=document.createElement("option");b.value="全て";b.textContent="全て";mSel.appendChild(b);for(let m=1;m<=12;m++){const o=document.createElement("option");o.value=m;o.textContent=m+"月";mSel.appendChild(o);}if(def)mSel.value=String(now.getMonth()+1)}

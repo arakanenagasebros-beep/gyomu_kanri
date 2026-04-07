@@ -1,4 +1,4 @@
-/* === VIEWS (admin-specific) === */
+﻿/* === VIEWS (admin-specific) === */
 const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
 
 const DEFAULT_BOOTSTRAP_STAFF = [
@@ -56,7 +56,6 @@ async function bootstrapDefaultStaffIfNeeded(){
     const failed = [];
     try {
       for (const staff of missingStaff) {
-        try {
           const resp = await fetch(API_URL, {
             method: "POST",
             headers: {"Content-Type":"text/plain"},
@@ -74,9 +73,7 @@ async function bootstrapDefaultStaffIfNeeded(){
           applySyncMeta(syncMetaFromResult(result));
           if (!result.ok) throw new Error(result.error || "bootstrap failed");
           created.push(staff.id);
-        } catch (error) {
           failed.push(`${staff.id}: ${error && error.message ? error.message : "error"}`);
-        }
       }
 
       data.users = data.users || {};
@@ -702,27 +699,6 @@ if(hasPending){
   });
 }
 }
-// Approval bar
-let reqBar=document.getElementById("adminStampReqBar");
-if(!reqBar){reqBar=document.createElement("div");reqBar.id="adminStampReqBar";$("editCal").parentNode.appendChild(reqBar)}
-reqBar.innerHTML="";
-if(hasPending){
-  reqBar.className="admin-request-info";
-  reqBar.innerHTML=`<div class="ari-title">📨 スタンプ修正申請あり</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">ハイライト部分が申請された変更です</div>`;
-  const btnWrap=document.createElement("div");btnWrap.style.cssText="display:flex;gap:8px;";
-  const approveBtn=document.createElement("button");approveBtn.className="btn success small";approveBtn.textContent="✅ 承認";
-  approveBtn.addEventListener("click",()=>{
-    u.stamps=JSON.parse(JSON.stringify(u.pendingStampRequest.stamps));
-    u.pendingStampRequest={status:"approved",resolvedAt:Date.now()};saveData(data);
-    showModal({title:"承認しました",sub:`${u.name||u.id}のスタンプを更新しました`,big:"✅"});renderAdminEdit()});
-  const rejectBtn=document.createElement("button");rejectBtn.className="btn danger small";rejectBtn.textContent="❌ 却下";
-  rejectBtn.addEventListener("click",()=>{
-    u.pendingStampRequest={status:"rejected",resolvedAt:Date.now()};saveData(data);
-    showModal({title:"却下しました",sub:`${u.name||u.id}の申請を却下しました`,big:"❌"});renderAdminEdit()});
-  btnWrap.appendChild(approveBtn);btnWrap.appendChild(rejectBtn);reqBar.appendChild(btnWrap);
-} else {reqBar.className="";}
-}
-
 /* === CALENDAR === */
 function renderCalendar({mount,monthCursor,stampedMap,clickable,onDayClick,pendingChanges,originalStamps}){
   const monthKey = `${monthCursor.getFullYear()}-${monthCursor.getMonth()}`;
@@ -868,7 +844,7 @@ function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
 }
 
 function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
-  theadEl.innerHTML=`<tr><th>No</th><th>状況</th><th>形態</th><th>依頼日</th><th>期限日</th><th>完了日</th><th>工数</th><th>ﾃｷｽﾄｺｰﾄﾞ</th><th>業務種類</th><th>内容</th><th>担当社員</th><th>担当ｽﾀｯﾌ</th><th>備考</th><th>有効指摘</th><th>提出</th>${isAdmin?"<th>削除</th>":""}</tr>`;
+  theadEl.innerHTML=`<tr><th>No</th><th>状況</th><th>形態</th><th>依頼日</th><th>期限日</th><th>完了日</th><th>ﾃｷｽﾄｺｰﾄﾞ</th><th>業務種類</th><th>工数</th><th>内容</th><th>担当社員</th><th>担当ｽﾀｯﾌ</th><th>備考</th><th>有効指摘</th><th>提出</th>${isAdmin?"<th>削除</th>":""}</tr>`;
   tbodyEl.innerHTML="";
   if(!tasks.length){tbodyEl.innerHTML=`<tr><td colspan="${isAdmin?16:15}" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;return}
   tasks.forEach(t=>{
@@ -881,10 +857,9 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
     // WorkType
     tr.appendChild(mkTd(t.workType));
     tr.appendChild(mkTd(t.requestDate||""));tr.appendChild(mkTd(t.deadline||""));tr.appendChild(mkTd(t.completionDate||""));
-    tr.appendChild(mkTd(t.manHours||0));
     tr.appendChild(mkTd((t.textCodes||[]).join(", ")));
-    // TaskType - read-only for staff
     tr.appendChild(mkTd(t.taskType||""));
+    tr.appendChild(mkTd(t.manHours||0));
     tr.appendChild(mkTd((t.content||"").substring(0,20)));tr.appendChild(mkTd(t.employee||""));tr.appendChild(mkTd(t.staff||""));
     // Notes - editable for staff
     if(!isAdmin){
@@ -1010,7 +985,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         td.addEventListener("dblclick",()=>{
           if(td.classList.contains("editing"))return;
           td.classList.add("editing");
-          const fields=["seqNum","","workType","requestDate","deadline","completionDate","manHours","textCodes","taskType","content","employee","staff","notes"];
+          const fields=["seqNum","","workType","requestDate","deadline","completionDate","textCodes","taskType","manHours","content","employee","staff","notes"];
           const f=fields[ci];if(!f)return;
           let inp;
           if(f==="workType"){inp=document.createElement("select");["出勤","在宅"].forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;inp.appendChild(o)});inp.value=t[f]||"";}
@@ -1023,6 +998,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           inp.style.cssText="font-size:11px;padding:2px 4px;border-radius:6px;width:100%;min-width:60px;";
           td.textContent="";td.appendChild(inp);inp.focus();
           const save=()=>{td.classList.remove("editing");
+            if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は編集できません`,big:"NG"});renderAdminTaskList();return;}
             if(f==="textCodes"){t.textCodes=inp.value.split(",").map(x=>x.trim()).filter(x=>x);}
             else if(f==="manHours"||f==="seqNum"){t[f]=parseInt(inp.value)||0;}
             else{t[f]=inp.value;}
@@ -1033,7 +1009,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       // Delete button
       const tdDel=document.createElement("td");
 const bD=document.createElement("button");bD.className="btn danger small";bD.textContent="削除";
-bD.addEventListener("click",()=>{if(!confirm("この業務を削除しますか？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
+bD.addEventListener("click",()=>{if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は削除できません`,big:"NG"});return;}if(!confirm("この業務を削除しますか？"))return;data.tasks=data.tasks.filter(x=>x.id!==t.id);saveData(data);renderAdminTaskList()});
       tdDel.appendChild(bD);tr.appendChild(tdDel);
     }
     tbodyEl.appendChild(tr);
@@ -1205,6 +1181,7 @@ function renderTextCodeInputs(codes){
 function getTextCodes(){return Array.from($("taTextCodesArea").querySelectorAll("input")).map(i=>i.value)}
 $("taskAddSave").addEventListener("click",()=>{
   const wt=$("taWorkType").value;const tc=getTextCodes().filter(x=>x);
+  if(isLockedMonth($("taRequestDate").value)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey($("taRequestDate").value)} は編集できません`,big:"NG"});return}
   if(editingTaskId){
     const t=data.tasks.find(x=>x.id===editingTaskId);if(!t)return;
     applyTaskDraft(t,{workType:wt,status:$("taStatus").value,requestDate:$("taRequestDate").value,deadline:$("taDeadline").value,completionDate:$("taCompletionDate").value,
@@ -3436,11 +3413,42 @@ startEdit = function(td, u, oi, field) {
 let _adminEditVisualBaselineUserId = "";
 let _adminEditVisualBaselineHasPending = false;
 let _adminEditVisualBaselineStamps = null;
+const ADMIN_STAMP_REQUEST_DRAFT_KEY_PREFIX = "stampcard_admin_stamp_request_draft_v1:";
 
 function resetAdminEditVisualBaseline() {
   _adminEditVisualBaselineUserId = "";
   _adminEditVisualBaselineHasPending = false;
   _adminEditVisualBaselineStamps = null;
+}
+
+function getAdminStampRequestDraftKey(userId) {
+  return `${ADMIN_STAMP_REQUEST_DRAFT_KEY_PREFIX}${String(userId || "")}`;
+}
+
+function clearAdminStampRequestDraft(userId) {
+  if (!userId) return;
+  localStorage.removeItem(getAdminStampRequestDraftKey(userId));
+}
+
+function loadAdminStampRequestDraft(user) {
+  if (!user || !user.id || !user.pendingStampRequest || user.pendingStampRequest.status !== "pending") return null;
+  try {
+    const raw = localStorage.getItem(getAdminStampRequestDraftKey(user.id));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (String((parsed && parsed.requestedAt) || "") !== String(user.pendingStampRequest.requestedAt || "")) return null;
+    return parsed && parsed.stamps && typeof parsed.stamps === "object" ? cloneDeep(parsed.stamps) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function saveAdminStampRequestDraft(user, stamps) {
+  if (!user || !user.id || !user.pendingStampRequest || user.pendingStampRequest.status !== "pending") return;
+  localStorage.setItem(getAdminStampRequestDraftKey(user.id), JSON.stringify({
+    requestedAt: user.pendingStampRequest.requestedAt || "",
+    stamps: cloneDeep(stamps || {})
+  }));
 }
 
 function getAdminEditVisualBaseline(u, hasPending) {
@@ -3480,32 +3488,33 @@ renderAdminEdit = function() {
   $("eMonthKey").textContent = ym(editMonthCursor);
 
   const sInc = calcStampIncentive(total);
-  $("incentiveDisplay").innerHTML = `<div class="incentive-box"><div class="ib-title">Stamp Incentive</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計 ${total}pt</div></div>`;
+  $("incentiveDisplay").innerHTML = `<div class="incentive-box"><div class="ib-title">Stamp Incentive</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">総計 ${total}pt</div></div>`;
   $("editMonthLabel").textContent = monthLabelJa(editMonthCursor);
 
   const hasPending = u.pendingStampRequest && u.pendingStampRequest.status === "pending";
   const visualBaseline = getAdminEditVisualBaseline(u, hasPending);
+  const pendingDraftStamps = hasPending
+    ? (loadAdminStampRequestDraft(u) || cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {}))
+    : null;
+  if (!hasPending) clearAdminStampRequestDraft(u.id);
+
   if (hasPending) {
     renderCalendar({
       mount: $("editCal"),
       monthCursor: editMonthCursor,
-      stampedMap: u.pendingStampRequest.stamps,
+      stampedMap: pendingDraftStamps,
       clickable: true,
-      onDayClick: async d => {
+      onDayClick: d => {
         const key = ymd(d);
-        const nextStamps = cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {});
+        const nextStamps = cloneDeep(pendingDraftStamps || {});
         const cur = nextStamps[key];
         if (!cur) nextStamps[key] = true;
         else if (cur === true) nextStamps[key] = "emergency";
         else delete nextStamps[key];
-        try {
-          await updateStampRequestDraftRemote(u.id, nextStamps);
-          renderAdminEdit();
-        } catch (error) {
-          handleDirectActionError(error, "申請下書きの更新に失敗しました");
-        }
+        saveAdminStampRequestDraft(u, nextStamps);
+        renderAdminEdit();
       },
-      pendingChanges: u.pendingStampRequest.stamps,
+      pendingChanges: pendingDraftStamps,
       originalStamps: u.stamps
     });
   } else {
@@ -3543,32 +3552,42 @@ renderAdminEdit = function() {
 
   if (hasPending) {
     reqBar.className = "admin-request-info";
-    reqBar.innerHTML = `<div class="ari-title">スタンプ修正申請</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">内容を確認して承認または却下してください</div>`;
+    reqBar.innerHTML = `<div class="ari-title">スタンプ修正申請</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">日付の調整はローカル下書きとして保持し、承認時にまとめて反映します</div>`;
     const btnWrap = document.createElement("div");
     btnWrap.style.cssText = "display:flex;gap:8px;";
 
     const approveBtn = document.createElement("button");
     approveBtn.className = "btn success small";
     approveBtn.textContent = "承認";
-    approveBtn.addEventListener("click", () => {
-      resolveStampCorrectionRemote(u.id, "approved")
-        .then(() => {
-          showModal({ title: "承認しました", sub: `${u.name || u.id} のスタンプを更新しました`, big: "OK" });
-          renderAdminEdit();
-        })
-        .catch(error => handleDirectActionError(error, "申請承認に失敗しました"));
+    approveBtn.addEventListener("click", async () => {
+      const draftStamps = loadAdminStampRequestDraft(u) || cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {});
+      try {
+        if (JSON.stringify(draftStamps) !== JSON.stringify((u.pendingStampRequest && u.pendingStampRequest.stamps) || {})) {
+          await updateStampRequestDraftRemote(u.id, draftStamps);
+        }
+        await resolveStampCorrectionRemote(u.id, "approved");
+        clearAdminStampRequestDraft(u.id);
+        resetAdminEditVisualBaseline();
+        showModal({ title: "承認しました", sub: `${u.name || u.id} のスタンプを更新しました`, big: "OK" });
+        renderAdminEdit();
+      } catch (error) {
+        handleDirectActionError(error, "申請承認に失敗しました");
+      }
     });
 
     const rejectBtn = document.createElement("button");
     rejectBtn.className = "btn danger small";
     rejectBtn.textContent = "却下";
-    rejectBtn.addEventListener("click", () => {
-      resolveStampCorrectionRemote(u.id, "rejected")
-        .then(() => {
-          showModal({ title: "却下しました", sub: `${u.name || u.id} の申請を却下しました`, big: "OK" });
-          renderAdminEdit();
-        })
-        .catch(error => handleDirectActionError(error, "申請却下に失敗しました"));
+    rejectBtn.addEventListener("click", async () => {
+      try {
+        await resolveStampCorrectionRemote(u.id, "rejected");
+        clearAdminStampRequestDraft(u.id);
+        resetAdminEditVisualBaseline();
+        showModal({ title: "却下しました", sub: `${u.name || u.id} の申請を却下しました`, big: "OK" });
+        renderAdminEdit();
+      } catch (error) {
+        handleDirectActionError(error, "申請却下に失敗しました");
+      }
     });
 
     btnWrap.appendChild(approveBtn);
@@ -4006,4 +4025,367 @@ if (document.readyState === "loading") {
   installAdminDirectBindings();
 }
 
+const _renderAdminReportMgmtLatestBase = renderAdminReportMgmt;
+renderAdminReportMgmt = function() {
+  _renderAdminReportMgmtLatestBase();
+  syncPull().then(changed => {
+    if (changed && location.hash === "#admin-report-mgmt" && data.session.adminAuthed) renderAdminReportMgmt();
+  });
+};
+
+const _renderAdminReportDetailLatestBase = renderAdminReportDetail;
+renderAdminReportDetail = function() {
+  _renderAdminReportDetailLatestBase();
+  syncPull().then(changed => {
+    if (changed && location.hash === "#admin-report-detail" && data.session.adminAuthed && data.session.adminReportEditingUserId) renderAdminReportDetail();
+  });
+};
+
+const _renderAdminTaskListLatestBase = renderAdminTaskList;
+renderAdminTaskList = function() {
+  _renderAdminTaskListLatestBase();
+  syncPull().then(changed => {
+    if (changed && location.hash === "#admin-task-list" && data.session.adminAuthed) renderAdminTaskList();
+  });
+};
+
+let mcLatestInit = false;
+const monthCheckViewState = { tab: "summary", attendanceStaff: "全て", taskStaff: "全て", taskStatus: "全て", guideOpen: false };
+
+function getMonthCheckLockKey(y, m) {
+  return `${y}-${pad2(m)}`;
+}
+
+function getMonthCheckUserOptions() {
+  return Object.values(data.users || {})
+    .filter(Boolean)
+    .sort((a, b) => getUserDisplayName(a).localeCompare(getUserDisplayName(b), "ja"));
+}
+
+function getMonthCheckSummaryRows(y, m) {
+  return getMonthCheckUserOptions().map((user, index) => {
+    const reports = filterReports(user.reports, String(y), String(m), "全て");
+    const transport = reports.reduce((sum, report) => sum + (report.workType === "出勤" ? (parseInt(report.transport, 10) || 0) : 0), 0);
+    const incentiveCount = reports.reduce((sum, report) => sum + (parseInt(report.proofCount, 10) || 0), 0);
+    const salary = reports.reduce((sum, report) => sum + Math.round(calcReportSalary(report, user.id)), 0);
+    const workDays = new Set(reports.filter(report => report.workType === "出勤").map(report => report.date)).size;
+    return {
+      index: index + 1,
+      user,
+      result: checkUserMatch(user, y, m),
+      hasStampReq: !!(user.pendingStampRequest && user.pendingStampRequest.status === "pending"),
+      workDays,
+      incentiveCount,
+      salary,
+      transport
+    };
+  });
+}
+
+function getMonthCheckAttendanceRows(y, m, staffId) {
+  const rows = [];
+  getMonthCheckUserOptions().forEach(user => {
+    if (staffId && staffId !== "全て" && String(user.id) !== String(staffId)) return;
+    filterReports(user.reports, String(y), String(m), "出勤").forEach(report => {
+      rows.push({
+        userId: user.id,
+        userName: getUserDisplayName(user),
+        date: report.date || "",
+        start: `${report.startH || "00"}:${report.startM || "00"}`,
+        end: `${report.endH || "00"}:${report.endM || "00"}`,
+        breakTime: report.breakTime || "0",
+        workTime: report.workTime || "",
+        transport: `${parseInt(report.transport, 10) || 0}円`,
+        content: report.content || ""
+      });
+    });
+  });
+  return rows.sort((a, b) => a.userName.localeCompare(b.userName, "ja") || a.date.localeCompare(b.date));
+}
+
+function getMonthCheckTaskRows(y, m, staffId, status) {
+  return (data.tasks || [])
+    .filter(task => getMonthLockKey(task.requestDate) === getMonthCheckLockKey(y, m))
+    .filter(task => !staffId || staffId === "全て" || getTaskStaffUserId(task) === String(staffId))
+    .filter(task => !status || status === "全て" || String(task.status || "") === String(status))
+    .map(task => {
+      const userId = getTaskStaffUserId(task);
+      const user = (data.users || {})[userId] || findUserByStaffRef(task.staff);
+      return {
+        userId: userId || "",
+        userName: user ? getUserDisplayName(user) : (task.staff || ""),
+        status: task.status || "",
+        completionDate: task.completionDate || "",
+        taskType: task.taskType || "",
+        manHours: task.manHours || "",
+        validPointCount: task.validPointCount || 0
+      };
+    })
+    .sort((a, b) => a.userName.localeCompare(b.userName, "ja") || a.taskType.localeCompare(b.taskType, "ja"));
+}
+
+function renderMonthCheckGuide(container) {
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "12px";
+  const btn = document.createElement("button");
+  btn.className = "btn ghost small";
+  btn.textContent = monthCheckViewState.guideOpen ? "状態仕様を閉じる" : "状態仕様を見る";
+  btn.addEventListener("click", () => {
+    monthCheckViewState.guideOpen = !monthCheckViewState.guideOpen;
+    renderMonthCheck();
+  });
+  wrap.appendChild(btn);
+  if (monthCheckViewState.guideOpen) {
+    const panel = document.createElement("div");
+    panel.style.cssText = "margin-top:10px;padding:12px;border-radius:12px;background:rgba(255,255,255,.75);border:1px solid rgba(0,0,0,.08);";
+    panel.innerHTML = "<div style='font-weight:900;margin-bottom:6px;'>状態仕様</div><div style='font-size:12px;color:var(--muted);line-height:1.7;'>一致: 在宅日報の工数と業務管理の工数が一致している状態です。<br>業務過多: 日報工数が業務管理より多い状態です。<br>日報不足: 日報工数が業務管理より少ない状態です。</div>";
+    wrap.appendChild(panel);
+  }
+  container.appendChild(wrap);
+}
+
+function toggleMonthLock(y, m) {
+  const key = getMonthCheckLockKey(y, m);
+  const locked = !!(data.lockedMonths && data.lockedMonths[key]);
+  if (locked) {
+    if (!confirm(`${y}年${m}月の確定を取り消しますか？`)) return;
+    delete data.lockedMonths[key];
+    saveData(data);
+    renderMonthCheck();
+    return;
+  }
+  const rows = getMonthCheckSummaryRows(y, m);
+  if (rows.some(row => row.result.status !== "一致")) {
+    showModal({ title: "一致に変えてください", sub: "状態が一致でないため確定できません", big: "NG" });
+    return;
+  }
+  if (!confirm(`${y}年${m}月を確定しますか？`)) return;
+  data.lockedMonths = data.lockedMonths || {};
+  data.lockedMonths[key] = true;
+  saveData(data);
+  renderMonthCheck();
+}
+
+function renderMonthCheckExtraPanel(y, m, summaryRows) {
+  const area = $("mcConfirmArea");
+  if (!area) return;
+  area.innerHTML = "";
+  renderMonthCheckGuide(area);
+
+  const tabs = document.createElement("div");
+  tabs.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;";
+  [
+    { key: "summary", label: "月末チェック一覧" },
+    { key: "attendance", label: "出勤詳細" },
+    { key: "task", label: "在宅詳細" }
+  ].forEach(tab => {
+    const btn = document.createElement("button");
+    btn.className = `btn small ${monthCheckViewState.tab === tab.key ? "primary" : "ghost"}`;
+    btn.textContent = tab.label;
+    btn.addEventListener("click", () => {
+      monthCheckViewState.tab = tab.key;
+      renderMonthCheck();
+    });
+    tabs.appendChild(btn);
+  });
+  area.appendChild(tabs);
+
+  const key = getMonthCheckLockKey(y, m);
+  const locked = !!(data.lockedMonths && data.lockedMonths[key]);
+
+  if (monthCheckViewState.tab === "summary") {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<div class="bd" style="padding:0;"><div style="padding:14px;border-radius:14px;background:${locked ? "rgba(107,203,119,.12)" : "rgba(255,255,255,.75)"};border:1px solid rgba(0,0,0,.08);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><div><div style="font-weight:900;">${locked ? "この月は確定済みです" : "この月は未確定です"}</div><div class="sub">${summaryRows.filter(row => row.result.status === "一致").length}/${summaryRows.length} 件が一致</div></div></div></div>`;
+    const actionWrap = card.querySelector(".bd > div");
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = `btn ${locked ? "danger" : "success"}`;
+    toggleBtn.textContent = locked ? "取り消し" : "確定";
+    toggleBtn.addEventListener("click", () => toggleMonthLock(y, m));
+    actionWrap.appendChild(toggleBtn);
+    area.appendChild(card);
+    return;
+  }
+
+  if (monthCheckViewState.tab === "attendance") {
+    const filter = document.createElement("div");
+    filter.className = "filter-bar";
+    const staffWrap = document.createElement("div");
+    staffWrap.className = "fg";
+    staffWrap.innerHTML = `<label>スタッフ名</label><select id="mcAttendanceStaff"></select>`;
+    filter.appendChild(staffWrap);
+    area.appendChild(filter);
+    const select = document.getElementById("mcAttendanceStaff");
+    select.innerHTML = "<option value='全て'>全て</option>";
+    getMonthCheckUserOptions().forEach(user => {
+      const option = document.createElement("option");
+      option.value = user.id;
+      option.textContent = getUserDisplayName(user);
+      select.appendChild(option);
+    });
+    select.value = monthCheckViewState.attendanceStaff;
+    select.addEventListener("change", () => {
+      monthCheckViewState.attendanceStaff = select.value;
+      renderMonthCheck();
+    });
+
+    const rows = getMonthCheckAttendanceRows(y, m, monthCheckViewState.attendanceStaff);
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "tableWrap";
+    tableWrap.innerHTML = "<table><thead><tr><th>スタッフID</th><th>スタッフ名</th><th>日付</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務時間</th><th>交通費</th><th>詳細</th></tr></thead><tbody></tbody></table>";
+    const tbody = tableWrap.querySelector("tbody");
+    if (!rows.length) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+    rows.forEach(row => {
+      const tr = document.createElement("tr");
+      [row.userId, row.userName, row.date, row.start, row.end, row.breakTime, row.workTime, row.transport, row.content].forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    area.appendChild(tableWrap);
+    return;
+  }
+
+  const filter = document.createElement("div");
+  filter.className = "filter-bar";
+  filter.innerHTML = `<div class="fg"><label>スタッフ名</label><select id="mcTaskStaff"></select></div><div class="fg"><label>状況</label><select id="mcTaskStatus"><option value="全て">全て</option><option value="依頼前">依頼前</option><option value="依頼中">依頼中</option><option value="期限超過">期限超過</option><option value="完了">完了</option></select></div>`;
+  area.appendChild(filter);
+  const taskStaff = document.getElementById("mcTaskStaff");
+  taskStaff.innerHTML = "<option value='全て'>全て</option>";
+  getMonthCheckUserOptions().forEach(user => {
+    const option = document.createElement("option");
+    option.value = user.id;
+    option.textContent = getUserDisplayName(user);
+    taskStaff.appendChild(option);
+  });
+  taskStaff.value = monthCheckViewState.taskStaff;
+  taskStaff.addEventListener("change", () => {
+    monthCheckViewState.taskStaff = taskStaff.value;
+    renderMonthCheck();
+  });
+  const taskStatus = document.getElementById("mcTaskStatus");
+  taskStatus.value = monthCheckViewState.taskStatus;
+  taskStatus.addEventListener("change", () => {
+    monthCheckViewState.taskStatus = taskStatus.value;
+    renderMonthCheck();
+  });
+
+  const rows = getMonthCheckTaskRows(y, m, monthCheckViewState.taskStaff, monthCheckViewState.taskStatus);
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "tableWrap";
+  tableWrap.innerHTML = "<table><thead><tr><th>スタッフID</th><th>スタッフ名</th><th>状況</th><th>完了日</th><th>業務種類</th><th>工数</th><th>有効指摘回数</th></tr></thead><tbody></tbody></table>";
+  const tbody = tableWrap.querySelector("tbody");
+  if (!rows.length) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    [row.userId, row.userName, row.status, row.completionDate, row.taskType, String(row.manHours), String(row.validPointCount)].forEach(value => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  area.appendChild(tableWrap);
+}
+
+renderMonthCheck = function() {
+  renderAdminNotifications();
+  renderAdminGlobalDashboard("adminMonthCheck", "adminMonthCheckNav", "month");
+  $("mcDetailCard").classList.add("hidden");
+  if (!mcLatestInit) {
+    const now = new Date();
+    const ySel = $("mcYear");
+    const mSel = $("mcMonth");
+    ySel.innerHTML = "";
+    mSel.innerHTML = "";
+    for (let y = 2024; y <= now.getFullYear() + 1; y++) {
+      const option = document.createElement("option");
+      option.value = y;
+      option.textContent = `${y}年`;
+      ySel.appendChild(option);
+    }
+    for (let m = 1; m <= 12; m++) {
+      const option = document.createElement("option");
+      option.value = m;
+      option.textContent = `${m}月`;
+      mSel.appendChild(option);
+    }
+    ySel.value = String(now.getFullYear());
+    mSel.value = String(now.getMonth() + 1);
+    ySel.addEventListener("change", () => renderMonthCheck());
+    mSel.addEventListener("change", () => renderMonthCheck());
+    mcLatestInit = true;
+  }
+
+  const y = parseInt($("mcYear").value, 10);
+  const m = parseInt($("mcMonth").value, 10);
+  const locked = !!(data.lockedMonths && data.lockedMonths[getMonthCheckLockKey(y, m)]);
+  const summaryRows = getMonthCheckSummaryRows(y, m);
+
+  $("mcThead").innerHTML = `<tr><th>#</th><th>ID</th><th>名前</th><th>種別</th><th>状態</th><th>スタンプ申請</th><th>出勤回数</th><th>インセンティブ回数</th><th>給与</th><th>交通費</th><th>操作</th></tr>`;
+  const tbody = $("mcTbody");
+  tbody.innerHTML = "";
+  if (!summaryRows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+  }
+  summaryRows.forEach(row => {
+    const tr = document.createElement("tr");
+    const statusColor = row.result.status === "一致" ? "var(--mint)" : (row.result.status === "日報不足" ? "var(--blue)" : "var(--orange)");
+    const values = [
+      String(row.index),
+      row.user.id || "",
+      getUserDisplayName(row.user),
+      row.user.userType || "",
+      row.result.status,
+      row.hasStampReq ? "有" : "無",
+      `${row.workDays}回`,
+      String(row.incentiveCount),
+      `${row.salary.toLocaleString()}円`,
+      `${row.transport.toLocaleString()}円`
+    ];
+    values.forEach((value, idx) => {
+      const td = document.createElement("td");
+      if (idx === 4) td.innerHTML = `<span style="color:${statusColor};font-weight:900;">${escapeHtml(value)}</span>`;
+      else td.textContent = value;
+      tr.appendChild(td);
+    });
+    const actionTd = document.createElement("td");
+    const attendanceBtn = document.createElement("button");
+    attendanceBtn.className = "btn small";
+    attendanceBtn.textContent = "出勤";
+    attendanceBtn.addEventListener("click", () => {
+      monthCheckViewState.tab = "attendance";
+      monthCheckViewState.attendanceStaff = row.user.id;
+      renderMonthCheck();
+    });
+    actionTd.appendChild(attendanceBtn);
+    const taskBtn = document.createElement("button");
+    taskBtn.className = "btn small";
+    taskBtn.style.marginLeft = "4px";
+    taskBtn.textContent = "在宅";
+    taskBtn.addEventListener("click", () => {
+      monthCheckViewState.tab = "task";
+      monthCheckViewState.taskStaff = row.user.id;
+      renderMonthCheck();
+    });
+    actionTd.appendChild(taskBtn);
+    const lockBtn = document.createElement("button");
+    lockBtn.className = `btn small ${locked ? "danger" : "success"}`;
+    lockBtn.style.marginLeft = "4px";
+    lockBtn.textContent = locked ? "取り消し" : "確定";
+    lockBtn.addEventListener("click", () => toggleMonthLock(y, m));
+    actionTd.appendChild(lockBtn);
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  });
+
+  renderMonthCheckExtraPanel(y, m, summaryRows);
+  syncPull().then(changed => {
+    if (changed && location.hash === "#admin-month-check" && data.session.adminAuthed) renderMonthCheck();
+  });
+};
+
 route();
+

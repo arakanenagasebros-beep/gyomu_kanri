@@ -2309,3 +2309,226 @@ if (document.readyState === "loading") {
 } else {
   installStaffDirectBindings();
 }
+
+function normalizeReportTimeInputValue(value, max) {
+  const num = Math.max(0, Math.min(max, parseInt(String(value || "").replace(/[^0-9]/g, ""), 10) || 0));
+  return pad2(num);
+}
+
+function normalizeReportBreakInputValue(value) {
+  return String(value || "").replace(/[^0-9]/g, "");
+}
+
+function bindReportTimeInputs() {
+  ["rpStartH", "rpStartM", "rpEndH", "rpEndM"].forEach(id => {
+    const node = $(id);
+    node.oninput = () => {
+      node.value = String(node.value || "").replace(/[^0-9]/g, "");
+      calcWorkTime();
+    };
+    node.onblur = () => {
+      const max = id.endsWith("H") ? 23 : 59;
+      node.value = normalizeReportTimeInputValue(node.value, max);
+      calcWorkTime();
+    };
+  });
+  $("rpBreak").oninput = () => {
+    $("rpBreak").value = normalizeReportBreakInputValue($("rpBreak").value);
+    calcWorkTime();
+  };
+  $("rpBreak").onblur = () => {
+    $("rpBreak").value = normalizeReportBreakInputValue($("rpBreak").value || "0");
+    calcWorkTime();
+  };
+}
+
+initReportForm = function() {
+  const u = data.users[data.session.userId];
+  if (!u) return;
+
+  $("reportUserName").textContent = (adminEditingReportMode ? "管理者編集: " : "") + (u.name || u.id);
+  if (!rpTransportLocked) {
+    $("rpTransport").readOnly = false;
+    $("rpTransport").style.opacity = "1";
+  }
+
+  const now = new Date();
+  const roundedMinute = Math.min(59, Math.round(now.getMinutes() / 5) * 5);
+  $("rpDate").value = ymd(new Date());
+  $("rpWorkType").value = "出勤";
+  $("rpStartH").value = pad2(now.getHours());
+  $("rpStartM").value = pad2(roundedMinute);
+  $("rpEndH").value = pad2(Math.min(23, now.getHours() + 1));
+  $("rpEndM").value = pad2(roundedMinute);
+  $("rpBreak").value = "0";
+  $("rpTransport").value = "";
+  $("rpTextCode").value = "";
+  $("rpContent").value = "";
+  popSel($("rpTaskType"), getTaskTypes());
+  const mh = [];
+  for (let i = 1; i <= 100; i++) mh.push(String(i));
+  popSel($("rpManHours"), mh, "1");
+  popSel($("rpBizId"), BIZ_IDS);
+  popSel($("rpProductId"), PRODUCT_IDS);
+  popSel($("rpServiceId"), SERVICE_IDS);
+  const years = [];
+  for (let y = 2025; y <= 2030; y++) years.push(String(y));
+  popSel($("rpYear"), years, "2026");
+
+  if (editingReportIdx >= 0 && u.reports[editingReportIdx]) {
+    const r = u.reports[editingReportIdx];
+    $("rpDate").value = r.date || ymd(new Date());
+    $("rpWorkType").value = r.workType || "出勤";
+    $("rpStartH").value = normalizeReportTimeInputValue(r.startH, 23);
+    $("rpStartM").value = normalizeReportTimeInputValue(r.startM, 59);
+    $("rpEndH").value = normalizeReportTimeInputValue(r.endH, 23);
+    $("rpEndM").value = normalizeReportTimeInputValue(r.endM, 59);
+    $("rpBreak").value = normalizeReportBreakInputValue(r.breakTime || "0");
+    if (r.taskType) $("rpTaskType").value = r.taskType;
+    if (r.manHours) $("rpManHours").value = r.manHours;
+    $("rpTransport").value = r.transport || "";
+    if (r.bizId) $("rpBizId").value = r.bizId;
+    if (r.productId) $("rpProductId").value = r.productId;
+    if (r.serviceId) $("rpServiceId").value = r.serviceId;
+    $("rpTextCode").value = r.textCode || "";
+    if (r.year) $("rpYear").value = r.year;
+    $("rpContent").value = r.content || "";
+  }
+
+  toggleWorkType();
+  calcWorkTime();
+  bindReportTimeInputs();
+  renderStaffSectionDashboard("reportInput", "staffReportInputDashboard", "クイックメニュー", "どの画面でも同じ場所から移動できます", "report-input");
+  renderTodayReportPreview();
+  if ($("rpDate")) $("rpDate").onchange = () => renderTodayReportPreview();
+};
+
+doRenderReportList = function() {
+  const u = data.users[data.session.userId];
+  if (!u) return;
+
+  const y = $("rcFilterYear").value;
+  const m = $("rcFilterMonth").value;
+  const wt = $("rcFilterType").value;
+  const filtered = filterReports(u.reports, y, m, wt);
+  const isAttendance = wt === "出勤";
+  const isRemote = wt === "在宅";
+  const showAttendanceLayout = isAttendance || (!isAttendance && !isRemote);
+
+  $("reportThead").innerHTML = showAttendanceLayout
+    ? `<tr><th>#</th><th>日付</th><th>業務形態</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務時間</th><th>交通費</th><th>詳細</th><th>インセンティブ回数</th><th>操作</th></tr>`
+    : `<tr><th>#</th><th>日付</th><th>業務形態</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務時間</th><th>業務種類</th><th>工数</th><th>インセンティブ回数</th><th>操作</th></tr>`;
+
+  const tb = $("reportTbody");
+  tb.innerHTML = "";
+  let totalMinutes = 0;
+  let totalSalary = 0;
+  let totalTransport = 0;
+  let totalIncentive = 0;
+
+  if (!filtered.length) {
+    tb.innerHTML = `<tr><td colspan="${showAttendanceLayout ? 11 : 11}" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+  } else {
+    filtered.forEach((r, index) => {
+      const originalIndex = u.reports.indexOf(r);
+      const minutes = calcWorkMinutes(r);
+      const salary = Math.round(calcReportSalary(r, u.id));
+      const transport = r.workType === "出勤" ? (parseInt(r.transport, 10) || 0) : 0;
+      const incentiveCount = parseInt(r.proofCount, 10) || 0;
+      totalMinutes += minutes;
+      totalSalary += salary;
+      totalTransport += transport;
+      totalIncentive += incentiveCount * 500;
+
+      const tr = document.createElement("tr");
+      const cells = [
+        String(index + 1),
+        r.date || "",
+        r.workType || "",
+        `${r.startH || "00"}:${r.startM || "00"}`,
+        `${r.endH || "00"}:${r.endM || "00"}`,
+        r.breakTime || "0",
+        r.workTime || ""
+      ];
+
+      if (showAttendanceLayout) {
+        cells.push(`${transport}円`);
+        cells.push((r.content || "").substring(0, 30));
+      } else {
+        cells.push(r.taskType || "");
+        cells.push(r.manHours || "");
+      }
+
+      cells.push(String(incentiveCount));
+
+      cells.forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+
+      const actionTd = document.createElement("td");
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn primary small";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", () => {
+        if (isLockedMonth(r.date)) {
+          showModal({ title: "確定済みの月です", sub: `${getMonthLockKey(r.date)} は編集できません`, big: "NG" });
+          return;
+        }
+        editingReportIdx = originalIndex;
+        location.hash = "#report-input";
+      });
+      actionTd.appendChild(editBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn danger small";
+      deleteBtn.style.marginLeft = "4px";
+      deleteBtn.textContent = "削除";
+      deleteBtn.addEventListener("click", () => {
+        if (isLockedMonth(r.date)) {
+          showModal({ title: "確定済みの月です", sub: `${getMonthLockKey(r.date)} は削除できません`, big: "NG" });
+          return;
+        }
+        if (!confirm("この日報を削除しますか？")) return;
+        deleteReportRemote(u.id, r.reportId, originalIndex)
+          .then(() => renderReportConfirm())
+          .catch(error => handleDirectActionError(error, "日報削除に失敗しました"));
+      });
+      actionTd.appendChild(deleteBtn);
+      tr.appendChild(actionTd);
+      tb.appendChild(tr);
+    });
+  }
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  const totalRemainMinutes = totalMinutes % 60;
+  $("rcSummaryBar").innerHTML = `<div class="summary-chip"><div><div class="sk">勤務時間</div><div class="sv">${totalHours}h${totalRemainMinutes > 0 ? totalRemainMinutes + "m" : ""}</div></div></div><div class="summary-chip"><div><div class="sk">インセンティブ</div><div class="sv">${totalIncentive.toLocaleString()}円</div></div></div><div class="summary-chip"><div><div class="sk">給与</div><div class="sv">${(totalSalary + totalIncentive).toLocaleString()}円</div></div></div><div class="summary-chip"><div><div class="sk">交通費</div><div class="sv">${totalTransport.toLocaleString()}円</div></div></div>`;
+};
+
+const _renderReportConfirmFinalSyncBase = renderReportConfirm;
+renderReportConfirm = function() {
+  _renderReportConfirmFinalSyncBase();
+  syncPull().then(changed => {
+    if (changed && location.hash === "#report-confirm" && data.session.userId) renderReportConfirm();
+  });
+};
+
+const _renderStaffTaskListFinalSyncBase = renderStaffTaskList;
+renderStaffTaskList = function() {
+  _renderStaffTaskListFinalSyncBase();
+  syncPull().then(changed => {
+    if (changed && location.hash === "#staff-task-list" && data.session.userId) renderStaffTaskList();
+  });
+};
+
+const _submitStaffReportRemoteLockedBase = submitStaffReportRemote;
+submitStaffReportRemote = async function(andContinue) {
+  const lockDate = $("rpDate").value;
+  if (isLockedMonth(lockDate)) {
+    showModal({ title: "確定済みの月です", sub: `${getMonthLockKey(lockDate)} は編集できません`, big: "NG" });
+    return false;
+  }
+  return _submitStaffReportRemoteLockedBase(andContinue);
+};
+route();
