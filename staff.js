@@ -210,13 +210,13 @@ if(stampEditMode){
   bar.appendChild(legendDiv);
   // Mode toggle
   const modeDiv=document.createElement("div");modeDiv.style.cssText="display:flex;gap:6px;align-items:center;flex:1;";
-  const normalBtn=document.createElement("button");normalBtn.className="btn small"+(stampEditEmergencyMode?"":" primary");normalBtn.textContent="✓ 通常";
+  const normalBtn=document.createElement("button");normalBtn.className="btn small";normalBtn.style.cssText=!stampEditEmergencyMode?"background:linear-gradient(135deg,#6bc2f0,#a78bfa);border-color:rgba(107,194,240,.3);color:#fff;":"";normalBtn.textContent="✓ 通常";
   normalBtn.addEventListener("click",()=>{stampEditEmergencyMode=false;saveStampEditDraft(u.id);renderUserHome()});
-  const emgBtn=document.createElement("button");emgBtn.className="btn small"+(stampEditEmergencyMode?" primary":"");emgBtn.style.cssText=stampEditEmergencyMode?"background:linear-gradient(135deg,#ff9a56,#ffd93d);border-color:rgba(255,154,86,.3);color:#fff;":"";
+  const emgBtn=document.createElement("button");emgBtn.className="btn small";emgBtn.style.cssText=stampEditEmergencyMode?"background:linear-gradient(135deg,#ff9a56,#ffd93d);border-color:rgba(255,154,86,.3);color:#fff;":"";
   emgBtn.textContent="⚡ 緊急出勤";
   emgBtn.addEventListener("click",()=>{stampEditEmergencyMode=true;saveStampEditDraft(u.id);renderUserHome()});
   modeDiv.appendChild(normalBtn);modeDiv.appendChild(emgBtn);bar.appendChild(modeDiv);
-  const applyBtn=document.createElement("button");applyBtn.className="btn primary small";applyBtn.textContent="📨 申請する";
+  const applyBtn=document.createElement("button");applyBtn.className="btn small";applyBtn.style.cssText=stampEditEmergencyMode?"background:linear-gradient(135deg,#ff9a56,#ffd93d);border-color:rgba(255,154,86,.3);color:#fff;":"background:linear-gradient(135deg,#6bc2f0,#a78bfa);border-color:rgba(107,194,240,.3);color:#fff;";applyBtn.textContent="📨 申請する";
   applyBtn.addEventListener("click",()=>{
     u.pendingStampRequest={stamps:JSON.parse(JSON.stringify(stampEditStamps)),status:"pending",createdAt:Date.now()};
     clearStampEditDraft(u.id);saveData(data);stampEditMode=false;stampEditStamps={};stampEditEmergencyMode=false;
