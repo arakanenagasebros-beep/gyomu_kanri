@@ -666,6 +666,8 @@ renderAdminEdit();
 showModal({title:"更新完了",big:"✅"});
 });
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
+  ensureUserShape(u);
+  u.stamps = u.stamps || {};                        
 $("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
 fillStaffPasswordField("editUpw", u.id);
 $("editUpw").value="";
@@ -679,7 +681,26 @@ if(hasPending){
     onDayClick:d=>{const k=ymd(d);const target=u.pendingStampRequest.stamps||(u.pendingStampRequest.stamps={});const cur=target[k];if(!cur)target[k]=true;else if(cur===true)target[k]="emergency";else delete target[k];saveData(data);renderAdminEdit()},
     pendingChanges:u.pendingStampRequest.stamps,originalStamps:u.stamps});
 } else {
-  renderCalendar({mount:$("editCal"),monthCursor:editMonthCursor,stampedMap:u.stamps,clickable:true,onDayClick:d=>{const k=ymd(d);const cur=u.stamps[k];if(!cur)u.stamps[k]=true;else if(cur===true)u.stamps[k]="emergency";else delete u.stamps[k];saveData(data);renderAdminEdit()}});
+  const targetStamps = u.stamps || (u.stamps = {});
+  renderCalendar({
+    mount: $("editCal"),
+    monthCursor: editMonthCursor,
+    stampedMap: targetStamps,
+    clickable: true,
+    onDayClick: d => {
+      const k = ymd(d);
+      const target = u.stamps || (u.stamps = {});
+      const cur = target[k];
+
+      if(!cur) target[k] = true;
+      else if(cur === true) target[k] = "emergency";
+      else delete target[k];
+
+      saveData(data);
+      renderAdminEdit();
+    }
+  });
+}
 }
 // Approval bar
 let reqBar=document.getElementById("adminStampReqBar");
