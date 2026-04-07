@@ -716,10 +716,10 @@ function buildTaskFilterSelects(ySel,mSel,staffSel,empSel){
 
 function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
   return data.tasks.filter(t=>{
-    if(subTabStaff&&t.staff!==subTabStaff)return false;
+    if(subTabStaff&&!taskMatchesStaffRef(t,subTabStaff))return false;
     // Hide specific staff from 全体 view
     if(!subTabStaff&&hideStaffs&&hideStaffs.length){
-      for(const hs of hideStaffs){if(t.staff&&t.staff.includes(hs))return false}
+      for(const hs of hideStaffs){if(taskMatchesStaffRef(t,hs))return false}
     }
     const dateVal=t[dateType];
     if(y!=="全て"&&dateVal){const d=new Date(dateVal+"T00:00:00");if(d.getFullYear()!==parseInt(y))return false}
@@ -749,7 +749,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
     tr.appendChild(mkTd((t.textCodes||[]).join(", ")));
     // TaskType - read-only for staff
     tr.appendChild(mkTd(t.taskType||""));
-    tr.appendChild(mkTd((t.content||"").substring(0,20)));tr.appendChild(mkTd(t.employee||""));tr.appendChild(mkTd(t.staff||""));
+    tr.appendChild(mkTd((t.content||"").substring(0,20)));tr.appendChild(mkTd(t.employee||""));tr.appendChild(mkTd(getTaskStaffLabel(t)||""));
     // Notes - editable for staff
     if(!isAdmin){
       const tdN=document.createElement("td");const inp=document.createElement("input");inp.type="text";inp.value=t.notes||"";inp.style.cssText="font-size:10px;padding:2px 4px;border-radius:6px;width:80px;";
@@ -2530,5 +2530,20 @@ submitStaffReportRemote = async function(andContinue) {
     return false;
   }
   return _submitStaffReportRemoteLockedBase(andContinue);
+};
+filterTasks = function(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
+  return data.tasks.filter(t=>{
+    if(subTabStaff&&!taskMatchesStaffRef(t,subTabStaff))return false;
+    if(!subTabStaff&&hideStaffs&&hideStaffs.length){
+      for(const hs of hideStaffs){if(taskMatchesStaffRef(t,hs))return false}
+    }
+    const dateVal=t[dateType];
+    if(y!=="全て"&&dateVal){const d=new Date(dateVal+"T00:00:00");if(d.getFullYear()!==parseInt(y,10))return false}
+    if(m!=="全て"&&dateVal){const d=new Date(dateVal+"T00:00:00");if((d.getMonth()+1)!==parseInt(m,10))return false}
+    if(staff!=="全て"&&!taskMatchesStaffRef(t,staff))return false;
+    if(employee&&employee!=="全て"&&t.employee!==employee)return false;
+    if(status!=="全て"&&t.status!==status)return false;
+    return true;
+  });
 };
 route();

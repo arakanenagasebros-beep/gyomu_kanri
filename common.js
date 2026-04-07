@@ -1125,7 +1125,7 @@ function getTaskTypes(){return data.taskTypes||DEFAULT_TASK_TYPES}
 function getEmployees(){return data.employees||DEFAULT_EMPLOYEES}
 function getUserDisplayName(u){return u?(u.name||u.id||""):""}
 function getStaffUsers(){return Object.values(data.users||{}).filter(Boolean)}
-function getStaffNames(){return getStaffUsers().map(getUserDisplayName)}
+function getStaffNames(){return Array.from(new Set(getStaffUsers().map(getUserDisplayName).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"ja"))}
 function findUserByStaffRef(staffRef){
   if(staffRef==null)return null;
   const ref=String(staffRef);
