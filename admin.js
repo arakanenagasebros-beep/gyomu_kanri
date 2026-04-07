@@ -4052,6 +4052,35 @@ renderAdminTaskList = function() {
 let mcLatestInit = false;
 const monthCheckViewState = { tab: "summary", attendanceStaff: "全て", taskStaff: "全て", taskStatus: "全て", guideOpen: false };
 
+function getMonthCheckTabMeta(tab) {
+  if (tab === "attendance") {
+    return {
+      title: "出勤詳細",
+      sub: "出勤の日報一覧を年月とスタッフで確認します"
+    };
+  }
+  if (tab === "task") {
+    return {
+      title: "在宅詳細",
+      sub: "在宅業務の一覧を年月・スタッフ・状況で確認します"
+    };
+  }
+  return {
+    title: "月末チェック一覧",
+    sub: "在宅業務の日報と業務管理の工数照合"
+  };
+}
+
+function renderMonthCheckHeader(tab) {
+  const card = $("adminMonthCheck") ? $("adminMonthCheck").querySelector(".card") : null;
+  if (!card) return;
+  const titleEl = card.querySelector(".hd .title");
+  const subEl = card.querySelector(".hd .sub");
+  const meta = getMonthCheckTabMeta(tab);
+  if (titleEl) titleEl.textContent = meta.title;
+  if (subEl) subEl.textContent = meta.sub;
+}
+
 function getMonthCheckLockKey(y, m) {
   return `${y}-${pad2(m)}`;
 }
@@ -4169,7 +4198,12 @@ function toggleMonthLock(y, m) {
 function renderMonthCheckExtraPanel(y, m, summaryRows) {
   const area = $("mcConfirmArea");
   if (!area) return;
+  const tableWrap = $("mcTbody") && $("mcTbody").closest ? $("mcTbody").closest(".tableWrap") : null;
+  if (tableWrap && area.parentNode === tableWrap.parentNode && area.nextElementSibling !== tableWrap) {
+    tableWrap.parentNode.insertBefore(area, tableWrap);
+  }
   area.innerHTML = "";
+  renderMonthCheckHeader(monthCheckViewState.tab);
   renderMonthCheckGuide(area);
 
   const tabs = document.createElement("div");
@@ -4228,23 +4262,6 @@ function renderMonthCheckExtraPanel(y, m, summaryRows) {
       monthCheckViewState.attendanceStaff = select.value;
       renderMonthCheck();
     });
-
-    const rows = getMonthCheckAttendanceRows(y, m, monthCheckViewState.attendanceStaff);
-    const tableWrap = document.createElement("div");
-    tableWrap.className = "tableWrap";
-    tableWrap.innerHTML = "<table><thead><tr><th>スタッフID</th><th>スタッフ名</th><th>日付</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務時間</th><th>交通費</th><th>詳細</th></tr></thead><tbody></tbody></table>";
-    const tbody = tableWrap.querySelector("tbody");
-    if (!rows.length) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
-    rows.forEach(row => {
-      const tr = document.createElement("tr");
-      [row.userId, row.userName, row.date, row.start, row.end, row.breakTime, row.workTime, row.transport, row.content].forEach(value => {
-        const td = document.createElement("td");
-        td.textContent = value;
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    area.appendChild(tableWrap);
     return;
   }
 
@@ -4271,64 +4288,55 @@ function renderMonthCheckExtraPanel(y, m, summaryRows) {
     monthCheckViewState.taskStatus = taskStatus.value;
     renderMonthCheck();
   });
-
-  const rows = getMonthCheckTaskRows(y, m, monthCheckViewState.taskStaff, monthCheckViewState.taskStatus);
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "tableWrap";
-  tableWrap.innerHTML = "<table><thead><tr><th>スタッフID</th><th>スタッフ名</th><th>状況</th><th>完了日</th><th>業務種類</th><th>工数</th><th>有効指摘回数</th></tr></thead><tbody></tbody></table>";
-  const tbody = tableWrap.querySelector("tbody");
-  if (!rows.length) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
-  rows.forEach(row => {
-    const tr = document.createElement("tr");
-    [row.userId, row.userName, row.status, row.completionDate, row.taskType, String(row.manHours), String(row.validPointCount)].forEach(value => {
-      const td = document.createElement("td");
-      td.textContent = value;
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  area.appendChild(tableWrap);
 }
 
-renderMonthCheck = function() {
-  renderAdminNotifications();
-  renderAdminGlobalDashboard("adminMonthCheck", "adminMonthCheckNav", "month");
-  $("mcDetailCard").classList.add("hidden");
-  if (!mcLatestInit) {
-    const now = new Date();
-    const ySel = $("mcYear");
-    const mSel = $("mcMonth");
-    ySel.innerHTML = "";
-    mSel.innerHTML = "";
-    for (let y = 2024; y <= now.getFullYear() + 1; y++) {
-      const option = document.createElement("option");
-      option.value = y;
-      option.textContent = `${y}年`;
-      ySel.appendChild(option);
+function renderMonthCheckMainTable(y, m, summaryRows, locked) {
+  const tbody = $("mcTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (monthCheckViewState.tab === "attendance") {
+    const rows = getMonthCheckAttendanceRows(y, m, monthCheckViewState.attendanceStaff);
+    $("mcThead").innerHTML = `<tr><th>スタッフID</th><th>スタッフ名</th><th>日付</th><th>開始</th><th>終了</th><th>休憩</th><th>勤務時間</th><th>交通費</th><th>詳細</th></tr>`;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+      return;
     }
-    for (let m = 1; m <= 12; m++) {
-      const option = document.createElement("option");
-      option.value = m;
-      option.textContent = `${m}月`;
-      mSel.appendChild(option);
-    }
-    ySel.value = String(now.getFullYear());
-    mSel.value = String(now.getMonth() + 1);
-    ySel.addEventListener("change", () => renderMonthCheck());
-    mSel.addEventListener("change", () => renderMonthCheck());
-    mcLatestInit = true;
+    rows.forEach(row => {
+      const tr = document.createElement("tr");
+      [row.userId, row.userName, row.date, row.start, row.end, row.breakTime, row.workTime, row.transport, row.content].forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    return;
   }
 
-  const y = parseInt($("mcYear").value, 10);
-  const m = parseInt($("mcMonth").value, 10);
-  const locked = !!(data.lockedMonths && data.lockedMonths[getMonthCheckLockKey(y, m)]);
-  const summaryRows = getMonthCheckSummaryRows(y, m);
+  if (monthCheckViewState.tab === "task") {
+    const rows = getMonthCheckTaskRows(y, m, monthCheckViewState.taskStaff, monthCheckViewState.taskStatus);
+    $("mcThead").innerHTML = `<tr><th>スタッフID</th><th>スタッフ名</th><th>状況</th><th>完了日</th><th>業務種類</th><th>工数</th><th>有効指摘回数</th></tr>`;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+      return;
+    }
+    rows.forEach(row => {
+      const tr = document.createElement("tr");
+      [row.userId, row.userName, row.status, row.completionDate, row.taskType, String(row.manHours), String(row.validPointCount)].forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    return;
+  }
 
   $("mcThead").innerHTML = `<tr><th>#</th><th>ID</th><th>名前</th><th>種別</th><th>状態</th><th>スタンプ申請</th><th>出勤回数</th><th>インセンティブ回数</th><th>給与</th><th>交通費</th><th>操作</th></tr>`;
-  const tbody = $("mcTbody");
-  tbody.innerHTML = "";
   if (!summaryRows.length) {
     tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted);">データなし</td></tr>`;
+    return;
   }
   summaryRows.forEach(row => {
     const tr = document.createElement("tr");
@@ -4380,8 +4388,44 @@ renderMonthCheck = function() {
     tr.appendChild(actionTd);
     tbody.appendChild(tr);
   });
+}
+
+renderMonthCheck = function() {
+  renderAdminNotifications();
+  renderAdminGlobalDashboard("adminMonthCheck", "adminMonthCheckNav", "month");
+  $("mcDetailCard").classList.add("hidden");
+  if (!mcLatestInit) {
+    const now = new Date();
+    const ySel = $("mcYear");
+    const mSel = $("mcMonth");
+    ySel.innerHTML = "";
+    mSel.innerHTML = "";
+    for (let y = 2024; y <= now.getFullYear() + 1; y++) {
+      const option = document.createElement("option");
+      option.value = y;
+      option.textContent = `${y}年`;
+      ySel.appendChild(option);
+    }
+    for (let m = 1; m <= 12; m++) {
+      const option = document.createElement("option");
+      option.value = m;
+      option.textContent = `${m}月`;
+      mSel.appendChild(option);
+    }
+    ySel.value = String(now.getFullYear());
+    mSel.value = String(now.getMonth() + 1);
+    ySel.addEventListener("change", () => renderMonthCheck());
+    mSel.addEventListener("change", () => renderMonthCheck());
+    mcLatestInit = true;
+  }
+
+  const y = parseInt($("mcYear").value, 10);
+  const m = parseInt($("mcMonth").value, 10);
+  const locked = !!(data.lockedMonths && data.lockedMonths[getMonthCheckLockKey(y, m)]);
+  const summaryRows = getMonthCheckSummaryRows(y, m);
 
   renderMonthCheckExtraPanel(y, m, summaryRows);
+  renderMonthCheckMainTable(y, m, summaryRows, locked);
   syncPull().then(changed => {
     if (changed && location.hash === "#admin-month-check" && data.session.adminAuthed) renderMonthCheck();
   });
