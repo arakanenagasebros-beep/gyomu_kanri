@@ -15,13 +15,14 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
-body{font-family:var(--font-body);color:var(--text);background:var(--bg);overflow-x:hidden;padding-bottom:var(--sync-badge-clearance);}
+body{font-family:var(--font-body);color:var(--text);background:var(--bg);overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(600px circle at 10% 20%,rgba(255,107,157,.12),transparent),
   radial-gradient(500px circle at 85% 15%,rgba(255,154,86,.10),transparent),
   radial-gradient(700px circle at 50% 80%,rgba(107,203,119,.08),transparent),
   radial-gradient(400px circle at 70% 60%,rgba(77,150,255,.06),transparent);}
-.wrap{max-width:1200px;margin:0 auto;min-height:100%;padding:16px 14px calc(var(--sync-badge-clearance) + 24px);position:relative;z-index:1;}
+.wrap{max-width:1200px;margin:0 auto;padding:16px 14px 24px;position:relative;z-index:1;}
+.wrap > section:not(.hidden)::after{content:"";display:block;height:var(--sync-badge-clearance);}
 .hidden{display:none !important;}
 a{color:inherit;}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
