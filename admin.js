@@ -80,6 +80,7 @@ try{
 $("userLoginPw").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnUserLogin").click()});
 $("btnAdminLogin").addEventListener("click", async ()=>{const id=$("adminLoginId").value.trim(),pw=$("adminLoginPw").value;$("adminAuthErr").style.display="none";
 if(!API_URL){$("adminAuthErr").textContent="API未接続です（⚙で設定）";$("adminAuthErr").style.display="block";return}
+const _adminBtn=$("btnAdminLogin");_adminBtn.classList.add("loading");_adminBtn.textContent="ログイン中...";
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginAdmin",id,pw}),redirect:"follow"});
   const result=await resp.json();
@@ -93,6 +94,7 @@ try{
   });
   location.hash="#admin-task-list";
 }catch(e){$("adminAuthErr").textContent="通信エラー";$("adminAuthErr").style.display="block";}
+finally{_adminBtn.classList.remove("loading");_adminBtn.textContent="ログイン";}
 });
 $("adminLoginPw").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnAdminLogin").click()});
 

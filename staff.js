@@ -28,6 +28,7 @@ $("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventList
 // Login
 $("btnUserLogin").addEventListener("click", async ()=>{const id=$("userLoginId").value.trim(),pw=$("userLoginPw").value;$("userAuthErr").style.display="none";
 if(!API_URL){$("userAuthErr").textContent="API未接続です（⚙で設定）";$("userAuthErr").style.display="block";return}
+const _loginBtn=$("btnUserLogin");_loginBtn.classList.add("loading");_loginBtn.textContent="ログイン中...";
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginStaff",id,pw}),redirect:"follow"});
   const result=await resp.json();
@@ -50,6 +51,7 @@ try{
     location.hash="#user-stamp";
   }
 }catch(e){$("userAuthErr").textContent="通信エラー";$("userAuthErr").style.display="block";}
+finally{_loginBtn.classList.remove("loading");_loginBtn.textContent="ログイン 🚀";}
 });
 $("userLoginPw").addEventListener("keydown",e=>{if(e.key==="Enter")$("btnUserLogin").click()});
 
