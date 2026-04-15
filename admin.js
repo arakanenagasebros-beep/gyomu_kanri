@@ -2,20 +2,20 @@
 const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
 
 const DEFAULT_BOOTSTRAP_STAFF = [
-  { id: "shakai_test", pw: "shakai_test", name: "テスト社会人", userType: "社会人" },
-  { id: "ogasawara", pw: "ogasawara", name: "小笠原", userType: "社会人" },
-  { id: "morotomi", pw: "morotomi", name: "諸富", userType: "社会人" },
-  { id: "osawa", pw: "osawa", name: "大澤", userType: "社会人" },
-  { id: "yoneoka", pw: "yoneoka", name: "米岡", userType: "社会人" },
-  { id: "hosaka", pw: "hosaka", name: "保坂", userType: "社会人" },
-  { id: "gakusei_test", pw: "gakusei_test", name: "テスト学生", userType: "学生" },
-  { id: "miko", pw: "miko", name: "神子", userType: "学生" },
-  { id: "shirakawa", pw: "shirakawa", name: "白川", userType: "学生" },
-  { id: "matsumoto", pw: "matsumoto", name: "松本", userType: "学生" },
-  { id: "mizutani", pw: "mizutani", name: "水谷", userType: "学生" },
-  { id: "takeuchi", pw: "takeuchi", name: "竹内", userType: "学生" },
-  { id: "fujikawa", pw: "fujikawa", name: "藤川", userType: "学生" },
-  { id: "kobayashi", pw: "kobayashi", name: "小林", userType: "学生" }
+  { id: "shakai_test", name: "テスト社会人", userType: "社会人" },
+  { id: "ogasawara", name: "小笠原", userType: "社会人" },
+  { id: "morotomi", name: "諸富", userType: "社会人" },
+  { id: "osawa", name: "大澤", userType: "社会人" },
+  { id: "yoneoka", name: "米岡", userType: "社会人" },
+  { id: "hosaka", name: "保坂", userType: "社会人" },
+  { id: "gakusei_test", name: "テスト学生", userType: "学生" },
+  { id: "miko", name: "神子", userType: "学生" },
+  { id: "shirakawa", name: "白川", userType: "学生" },
+  { id: "matsumoto", name: "松本", userType: "学生" },
+  { id: "mizutani", name: "水谷", userType: "学生" },
+  { id: "takeuchi", name: "竹内", userType: "学生" },
+  { id: "fujikawa", name: "藤川", userType: "学生" },
+  { id: "kobayashi", name: "小林", userType: "学生" }
 ];
 let _defaultStaffBootstrapPromise = null;
 let armShouldReset = false;
@@ -49,65 +49,6 @@ $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEvent
 
 async function bootstrapDefaultStaffIfNeeded(){
   return false;
-  if (_defaultStaffBootstrapPromise) return _defaultStaffBootstrapPromise;
-  if (!data.session.adminAuthed || !API_URL || !getToken()) return false;
-  const missingStaff = DEFAULT_BOOTSTRAP_STAFF.filter(staff => !((data.users || {})[staff.id]));
-  if (!missingStaff.length) return false;
-
-  _defaultStaffBootstrapPromise = (async () => {
-    const created = [];
-    const failed = [];
-    try {
-      for (const staff of missingStaff) {
-          const resp = await fetch(API_URL, {
-            method: "POST",
-            headers: {"Content-Type":"text/plain"},
-            body: JSON.stringify({
-              _action: "upsertStaffUser",
-              token: getToken(),
-              id: staff.id,
-              pw: staff.pw,
-              name: staff.name,
-              userType: staff.userType
-            }),
-            redirect: "follow"
-          });
-          const result = await resp.json();
-          applySyncMeta(syncMetaFromResult(result));
-          if (!result.ok) throw new Error(result.error || "bootstrap failed");
-          created.push(staff.id);
-          failed.push(`${staff.id}: ${error && error.message ? error.message : "error"}`);
-      }
-
-      data.users = data.users || {};
-      data.userHourlyRates = data.userHourlyRates || {};
-      DEFAULT_BOOTSTRAP_STAFF.forEach((staff, index) => {
-        data.users[staff.id] = Object.assign({}, data.users[staff.id] || {}, {
-          id: staff.id,
-          name: staff.name,
-          userType: staff.userType,
-          createdAt: (data.users[staff.id] && data.users[staff.id].createdAt) || (Date.now() + index)
-        });
-        data.userHourlyRates[staff.id] = 1300;
-      });
-      saveData(data);
-      try { await syncPull(); } catch (_error) {}
-      if (failed.length) {
-        showModal({title:"一部スタッフ未作成",sub:`${failed.length}件失敗しました`,big:"⚠️"});
-      }
-      return created.length > 0;
-    } catch (error) {
-      if (created.length) {
-        try { await syncPull(); } catch (_error) {}
-      }
-      showModal({title:"初期スタッフ作成に失敗",sub:error && error.message ? error.message : "error",big:"⚠️"});
-      return false;
-    } finally {
-      _defaultStaffBootstrapPromise = null;
-    }
-  })();
-
-  return _defaultStaffBootstrapPromise;
 }
 
 // Login
@@ -225,7 +166,7 @@ let stampEditMode=false;
 let stampEditStamps={};
 let stampEditEmergencyMode=false;
 function renderUserHome(){const u=data.users[data.session.userId];if(!u){location.hash="#user-login";return}
-$("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u),rank=getRank(total);
+$("userNameLabel").textContent=u.name||u.id;const now=new Date(),total=countTotal(u);
 $("uTotal").textContent=total;$("uMonth").textContent=countThisMonth(u,now);
 renderRankBadge($("userRankArea"),total);renderProgress($("userProgressArea"),total);
 if(u.stamps[ymd(now)])$("stampDoneBanner").classList.remove("hidden");else $("stampDoneBanner").classList.add("hidden");
@@ -856,7 +797,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
     // No
     tr.appendChild(mkTd(t.seqNum||"-"));
     // Status
-    const tdSt=document.createElement("td");tdSt.innerHTML=`<span class="status-${t.status}">${t.status}</span>`;tr.appendChild(tdSt);
+    const tdSt=document.createElement("td");tdSt.innerHTML=`<span class="status-${escapeHtml(t.status)}">${escapeHtml(t.status)}</span>`;tr.appendChild(tdSt);
     // WorkType
     tr.appendChild(mkTd(t.workType));
     tr.appendChild(mkTd(t.requestDate||""));tr.appendChild(mkTd(t.deadline||""));tr.appendChild(mkTd(t.completionDate||""));
@@ -3065,7 +3006,7 @@ function doRenderMC(){
       const td=document.createElement("td");
       if(i===1)td.innerHTML=`<span class="tag">${escapeHtml(u.id)}</span>`;
       else if(i===3)td.innerHTML=`<span class="${cls}">${escapeHtml(u.userType||"学生")}</span>`;
-      else if(i===4)td.innerHTML=`<span style="${statusCls};font-weight:900;">${result.status}</span>`;
+      else if(i===4)td.innerHTML=`<span style="${statusCls};font-weight:900;">${escapeHtml(result.status)}</span>`;
       else if(i===10){
         const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="詳細";
         btn.addEventListener("click",()=>showMCDetail(u,y,m));td.appendChild(btn);
@@ -3137,7 +3078,7 @@ function showMCDetail(u,y,m){
     const stCls=d.status==="一致"?"color:var(--mint)":d.status==="日報不足"?"color:var(--blue)":"color:var(--orange)";
     [d.taskType,String(d.reportHours),String(d.taskHours),null].forEach((c,i)=>{
       const td=document.createElement("td");
-      if(i===3)td.innerHTML=`<span style="${stCls};font-weight:900;">${d.status}</span>`;
+      if(i===3)td.innerHTML=`<span style="${stCls};font-weight:900;">${escapeHtml(d.status)}</span>`;
       else td.textContent=c;
       tr.appendChild(td);
     });
@@ -3827,7 +3768,6 @@ function renderAdminGlobalDashboard(sectionId, mountId, currentKey) {
     else section.appendChild(mount);
   }
   mount.className = "dash-shell";
-  const stats = getAdminOverviewStats();
   const items = [
     { key: "task", label: "業務管理" },
     { key: "report", label: "日報管理" },
