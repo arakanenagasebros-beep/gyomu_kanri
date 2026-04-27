@@ -29,7 +29,7 @@ $("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.displa
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
-function route(){checkOverdue();const h=location.hash||"#admin-login";
+function route(){if(data.session.adminAuthed&&!getToken()){data.session.adminAuthed=false;saveLocalOnly(data);}checkOverdue();const h=location.hash||"#admin-login";
 if(h==="#user-login"||h==="#user-stamp"||h==="#user"||h==="#report-input"||h==="#report-confirm"||h==="#staff-task-list"){window.location.href="staff.html"+h;return}
 if(h==="#admin-login"){showOnly("adminAuth");$("adminAuthErr").style.display="none";$("adminLoginPw").value="";return}
 if(h==="#admin-report-mgmt"){if(!data.session.adminAuthed){location.hash="#admin-login";return}armShouldReset=true;showOnly("adminReportMgmt");renderAdminReportMgmt();return}

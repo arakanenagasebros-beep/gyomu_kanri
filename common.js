@@ -469,7 +469,7 @@ function initSync() {
   if (API_URL) {
     updateSyncUI("loading", "接続中...");
     testApiConnection().then(ok => {
-      if (ok) startSyncPolling();
+      if (ok) { startSyncPolling(); if (getToken()) syncCheckVersion(); }
       else updateSyncUI("err", "接続エラー - ⚙で設定確認");
     });
   } else {
