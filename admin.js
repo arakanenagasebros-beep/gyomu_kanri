@@ -3378,6 +3378,7 @@ let _adminEditVisualBaselineUserId = "";
 let _adminEditVisualBaselineHasPending = false;
 let _adminEditVisualBaselineStamps = null;
 const ADMIN_STAMP_REQUEST_DRAFT_KEY_PREFIX = "stampcard_admin_stamp_request_draft_v1:";
+const ADMIN_STAMP_DIRECT_DRAFT_KEY_PREFIX = "stampcard_admin_stamp_direct_draft_v1:";
 
 function resetAdminEditVisualBaseline() {
   _adminEditVisualBaselineUserId = "";
@@ -3413,6 +3414,27 @@ function saveAdminStampRequestDraft(user, stamps) {
     requestedAt: user.pendingStampRequest.requestedAt || "",
     stamps: cloneDeep(stamps || {})
   }));
+}
+
+function getAdminStampDirectDraftKey(userId) {
+  return `${ADMIN_STAMP_DIRECT_DRAFT_KEY_PREFIX}${String(userId || "")}`;
+}
+function loadAdminStampDirectDraft(userId) {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(getAdminStampDirectDraftKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? cloneDeep(parsed) : null;
+  } catch (_) { return null; }
+}
+function saveAdminStampDirectDraft(userId, stamps) {
+  if (!userId) return;
+  localStorage.setItem(getAdminStampDirectDraftKey(userId), JSON.stringify(cloneDeep(stamps || {})));
+}
+function clearAdminStampDirectDraft(userId) {
+  if (!userId) return;
+  localStorage.removeItem(getAdminStampDirectDraftKey(userId));
 }
 
 function getAdminEditVisualBaseline(u, hasPending) {
@@ -3461,6 +3483,9 @@ renderAdminEdit = function() {
     ? (loadAdminStampRequestDraft(u) || cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {}))
     : null;
   if (!hasPending) clearAdminStampRequestDraft(u.id);
+  const directDraftStamps = !hasPending ? (loadAdminStampDirectDraft(u.id) || cloneDeep(u.stamps)) : null;
+  const hasDirectChanges = !hasPending && directDraftStamps !== null &&
+    JSON.stringify(directDraftStamps) !== JSON.stringify(u.stamps);
 
   if (hasPending) {
     renderCalendar({
@@ -3485,20 +3510,19 @@ renderAdminEdit = function() {
     renderCalendar({
       mount: $("editCal"),
       monthCursor: editMonthCursor,
-      stampedMap: u.stamps,
+      stampedMap: directDraftStamps,
       clickable: true,
-      onDayClick: async d => {
+      onDayClick: d => {
         const key = ymd(d);
-        const cur = u.stamps[key];
+        const cur = directDraftStamps[key];
         const nextValue = !cur ? true : (cur === true ? "emergency" : null);
-        try {
-          await setStampRemote(u.id, key, nextValue, null);
-          renderAdminEdit();
-        } catch (error) {
-          handleDirectActionError(error, "スタンプ更新に失敗しました");
-        }
+        const next = cloneDeep(directDraftStamps);
+        if (nextValue == null) delete next[key];
+        else next[key] = nextValue;
+        saveAdminStampDirectDraft(u.id, next);
+        renderAdminEdit();
       },
-      pendingChanges: u.stamps,
+      pendingChanges: directDraftStamps,
       originalStamps: visualBaseline
     });
   }
@@ -3556,6 +3580,47 @@ renderAdminEdit = function() {
 
     btnWrap.appendChild(approveBtn);
     btnWrap.appendChild(rejectBtn);
+    reqBar.appendChild(btnWrap);
+  } else if (hasDirectChanges) {
+    reqBar.className = "admin-request-info";
+    reqBar.innerHTML = `<div class="ari-title">スタンプ編集（未保存）</div>`;
+    const btnWrap = document.createElement("div");
+    btnWrap.style.cssText = "display:flex;gap:8px;";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "btn success small";
+    saveBtn.textContent = "保存";
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "保存中...";
+      try {
+        const allKeys = new Set([...Object.keys(u.stamps), ...Object.keys(directDraftStamps)]);
+        for (const key of allKeys) {
+          const was = u.stamps[key];
+          const now = directDraftStamps[key];
+          if (JSON.stringify(was ?? null) !== JSON.stringify(now ?? null)) {
+            await setStampRemote(u.id, key, now ?? null, null);
+          }
+        }
+        clearAdminStampDirectDraft(u.id);
+        renderAdminEdit();
+      } catch (error) {
+        handleDirectActionError(error, "スタンプ保存に失敗しました");
+        saveBtn.disabled = false;
+        saveBtn.textContent = "保存";
+      }
+    });
+
+    const discardBtn = document.createElement("button");
+    discardBtn.className = "btn danger small";
+    discardBtn.textContent = "破棄";
+    discardBtn.addEventListener("click", () => {
+      clearAdminStampDirectDraft(u.id);
+      renderAdminEdit();
+    });
+
+    btnWrap.appendChild(saveBtn);
+    btnWrap.appendChild(discardBtn);
     reqBar.appendChild(btnWrap);
   } else {
     reqBar.className = "";
