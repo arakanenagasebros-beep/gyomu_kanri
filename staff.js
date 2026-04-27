@@ -18,6 +18,7 @@ if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";r
 if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
 location.hash="#user-login"}
 window.addEventListener("hashchange",route);
+window.addEventListener("app-data-updated",route);
 
 /* === NAV === */
 // Nav helpers (staff only - admin refs safely ignored via _noop)
@@ -39,11 +40,8 @@ try{
   data.users[result.user.id]=Object.assign({},data.users[result.user.id]||{},{name:result.user.name,userType:result.user.userType});
   saveLocalOnly(data);
   userMonthCursor=startOfMonth(new Date());
-  syncPull().then(changed=>{
-    if(!changed || data.session.userId!==result.user.id) return;
-    if(location.hash==="#user-stamp") renderStampScreen();
-    else if(location.hash==="#report-confirm") renderReportConfirm();
-  });
+  _loginBtn.textContent="データ取得中...";
+  await Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 5000))]);
   if(result.user.userType==="社会人"){location.hash="#report-confirm";}else{
     const today=ymd(new Date());
     const visited=data.users[result.user.id].stampScreenVisitedToday===today;

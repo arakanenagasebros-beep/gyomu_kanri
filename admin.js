@@ -41,6 +41,7 @@ if(h==="#admin"){if(!data.session.adminAuthed){location.hash="#admin-login";retu
 if(h==="#admin-edit"){if(!data.session.adminAuthed||!data.session.adminEditingUserId){location.hash="#admin";return}showOnly("adminEdit");renderAdminEdit();syncPull().then(changed=>{if(changed && location.hash==="#admin-edit" && data.session.adminAuthed && data.session.adminEditingUserId) renderAdminEdit()});return}
 location.hash="#admin-login"}
 window.addEventListener("hashchange",route);
+window.addEventListener("app-data-updated",route);
 
 /* === NAV === */
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
@@ -89,9 +90,8 @@ try{
   data.session.adminAuthed=true;
   data.session.adminEditingUserId="";
   saveLocalOnly(data);
-  syncPull().then(changed=>{
-    if(changed && location.hash==="#admin-task-list" && data.session.adminAuthed) renderAdminTaskList();
-  });
+  _adminBtn.textContent="データ取得中...";
+  await Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 5000))]);
   location.hash="#admin-task-list";
 }catch(e){$("adminAuthErr").textContent="通信エラー";$("adminAuthErr").style.display="block";}
 finally{_adminBtn.classList.remove("loading");_adminBtn.textContent="ログイン";}

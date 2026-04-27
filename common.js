@@ -250,7 +250,15 @@ function updateSyncedBaseline(mutator, syncMeta) {
 }
 
 function saveLocalOnly(d) {
-  localStorage.setItem(LS_KEY, JSON.stringify(cloneForStorage(d)));
+  const _lsStr = JSON.stringify(cloneForStorage(d));
+  try {
+    localStorage.setItem(LS_KEY, _lsStr);
+  } catch(e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      localStorage.removeItem(LAST_SYNCED_KEY);
+      try { localStorage.setItem(LS_KEY, _lsStr); } catch(e2) {}
+    }
+  }
 }
 
 function saveLocalAsSynced(d, syncMeta) {
@@ -458,6 +466,18 @@ function migrateData() {
 
 function initSync() {
   setupApiModal();
+  window.addEventListener('storage', function(e) {
+    if (e.key !== LS_KEY || !e.newValue) return;
+    try {
+      const incoming = JSON.parse(e.newValue);
+      if ((incoming._version || 0) > (data._version || 0)) {
+        Object.assign(data, incoming);
+        _syncVersion = incoming._version || _syncVersion;
+        persistSyncVersion();
+        window.dispatchEvent(new CustomEvent('app-data-updated'));
+      }
+    } catch(ex) {}
+  });
   const setupBtn = document.getElementById("syncSetup");
   if (setupBtn) setupBtn.addEventListener("click", promptApiUrl);
   const manualBtn = document.getElementById("syncManual");
