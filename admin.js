@@ -3483,9 +3483,9 @@ renderAdminEdit = function() {
     ? (loadAdminStampRequestDraft(u) || cloneDeep((u.pendingStampRequest && u.pendingStampRequest.stamps) || {}))
     : null;
   if (!hasPending) clearAdminStampRequestDraft(u.id);
-  const directDraftStamps = !hasPending ? (loadAdminStampDirectDraft(u.id) || cloneDeep(u.stamps)) : null;
+  const directDraftStamps = !hasPending ? (loadAdminStampDirectDraft(u.id) || cloneDeep(u.stamps || {})) : null;
   const hasDirectChanges = !hasPending && directDraftStamps !== null &&
-    JSON.stringify(directDraftStamps) !== JSON.stringify(u.stamps);
+    JSON.stringify(directDraftStamps) !== JSON.stringify(u.stamps || {});
 
   if (hasPending) {
     renderCalendar({
@@ -3507,8 +3507,10 @@ renderAdminEdit = function() {
       originalStamps: u.stamps
     });
   } else {
+    const _calEl = $("editCal");
+    if (_calEl) _calEl._calendarState = null;
     renderCalendar({
-      mount: $("editCal"),
+      mount: _calEl,
       monthCursor: editMonthCursor,
       stampedMap: directDraftStamps,
       clickable: true,
@@ -3594,7 +3596,7 @@ renderAdminEdit = function() {
       saveBtn.disabled = true;
       saveBtn.textContent = "保存中...";
       try {
-        const allKeys = new Set([...Object.keys(u.stamps), ...Object.keys(directDraftStamps)]);
+        const allKeys = new Set([...Object.keys(u.stamps || {}), ...Object.keys(directDraftStamps)]);
         for (const key of allKeys) {
           const was = u.stamps[key];
           const now = directDraftStamps[key];
