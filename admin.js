@@ -1945,6 +1945,113 @@ importTasksFromFile = async function(file) {
   showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
 };
 
+function getTaskImportValidValues() {
+  const opts = getTaskImportTemplateOptionValues();
+  return {
+    workTypes: opts.workTypeValues.filter(Boolean),
+    statuses: opts.statusValues.filter(Boolean),
+    taskTypes: getTaskTypes().filter(Boolean),
+    employees: getEmployees().filter(Boolean),
+    staffNames: opts.staffValues.filter(Boolean)
+  };
+}
+
+function validateTaskImportRecord(record, rowNum, valid) {
+  const errs = [];
+  if (record.workType && valid.workTypes.length && valid.workTypes.indexOf(record.workType) < 0)
+    errs.push(`${rowNum}行目: 業務形態「${record.workType}」は無効です（使用可能: ${valid.workTypes.join(" / ")}）`);
+  if (record.status && valid.statuses.length && valid.statuses.indexOf(record.status) < 0)
+    errs.push(`${rowNum}行目: 状態「${record.status}」は無効です（使用可能: ${valid.statuses.join(" / ")}）`);
+  ["requestDate", "deadline", "completionDate"].forEach(key => {
+    if (record[key] && !/^\d{4}-\d{2}-\d{2}$/.test(record[key]))
+      errs.push(`${rowNum}行目: ${key}「${record[key]}」は YYYY-MM-DD 形式で入力してください`);
+  });
+  const mh = record.manHours ? parseInt(record.manHours, 10) : NaN;
+  if (record.manHours && (isNaN(mh) || mh < 1))
+    errs.push(`${rowNum}行目: 工数「${record.manHours}」は1以上の整数で入力してください`);
+  if (record.taskType && valid.taskTypes.length && valid.taskTypes.indexOf(record.taskType) < 0)
+    errs.push(`${rowNum}行目: 業務種類「${record.taskType}」は登録されていません`);
+  if (record.employee && valid.employees.length && valid.employees.indexOf(record.employee) < 0)
+    errs.push(`${rowNum}行目: 担当社員「${record.employee}」は登録されていません`);
+  if (record.staff && record.staff !== "未指定" && valid.staffNames.length && valid.staffNames.indexOf(record.staff) < 0)
+    errs.push(`${rowNum}行目: 担当スタッフ「${record.staff}」は登録されていません`);
+  return errs;
+}
+
+convertImportRowsToTasks = function(rows) {
+  if (!rows.length) return [];
+  const headerRowIndex = findTaskImportHeaderRowIndex(rows);
+  if (headerRowIndex < 0) return [];
+  const headerMap = rows[headerRowIndex].map(normalizeTaskImportHeader);
+  const defaults = getTaskImportDefaults();
+  const valid = getTaskImportValidValues();
+
+  // Pass 1: parse all rows and validate
+  const records = [];
+  const allErrors = [];
+  for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    const record = {};
+    headerMap.forEach((key, idx) => { record[key] = normalizeTaskImportValue(key, (row && row[idx]) || ""); });
+    const hasAnyValue = Object.values(record).some(value => String(value || "").trim() !== "");
+    if (!hasAnyValue) continue;
+    const errs = validateTaskImportRecord(record, i + 1, valid);
+    allErrors.push(...errs);
+    records.push({ record, i });
+  }
+  if (allErrors.length) throw new Error(allErrors.join("\n"));
+
+  // Pass 2: create tasks only if all rows are valid
+  const tasks = [];
+  for (const { record, i } of records) {
+    const workType = record.workType || defaults.workType;
+    const task = createTaskDraft({
+      id: Date.now() + i,
+      seqNum: nextSeqNum(workType),
+      workType,
+      status: record.status || defaults.status,
+      requestDate: record.requestDate || defaults.requestDate,
+      deadline: record.deadline || defaults.deadline,
+      completionDate: record.completionDate || "",
+      manHours: record.manHours || defaults.manHours,
+      textCodes: record.textCodes || "",
+      taskType: record.taskType || defaults.taskType,
+      content: record.content || "",
+      employee: record.employee || defaults.employee,
+      staff: record.staff || defaults.staff,
+      notes: record.notes || ""
+    });
+    tasks.push(task);
+    data.tasks.push(task);
+  }
+  return tasks;
+};
+
+importTasksFromFile = async function(file) {
+  if (!file) return;
+  const isXlsx = /\.xlsx$/i.test(String(file.name || ""));
+  const text = isXlsx ? "" : await file.text();
+  let imported = [];
+  try {
+    const rows = isXlsx ? await parseTaskImportRowsFromXlsx(file) : await parseTaskImportRows(text);
+    imported = convertImportRowsToTasks(rows);
+  } catch (error) {
+    showModal({ title: "Excel取込できません", sub: (error && error.message) || "テンプレートの形式を確認してください", big: "NG" });
+    return;
+  }
+  if (!imported.length) {
+    const looksLikeExcelFrameset = !isXlsx && /WorksheetSource|ExcelWorkbook|sheet001\.htm|File-List/i.test(text);
+    const sub = looksLikeExcelFrameset
+      ? "この .xls は分割保存形式です。テンプレートから出力した .xlsx を使うか、.files 内の sheet001.htm を取り込んでください。"
+      : "テンプレートは1行目が説明、2行目が見出しです。3行目以降にデータを入れてください。";
+    showModal({ title: "Excel取込できません", sub, big: "NG" });
+    return;
+  }
+  saveData(data);
+  renderAdminTaskList();
+  showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
+};
+
 const REPORT_IMPORT_TEMPLATE_FILE_NAME = "業務日報一括登録テンプレート.xlsx";
 
 function getReportImportHeaders() {
