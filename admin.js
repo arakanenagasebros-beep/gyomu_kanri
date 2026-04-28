@@ -2694,7 +2694,16 @@ async function openStaffEdit(userId) {
   $("seName").value = u.name || "";
   $("seType").value = u.userType || "学生";
   $("seRate").value = String(getUserHourlyRate(u.id));
-  try { $("sePw").value = await fetchStaffPasswordForAdmin(u.id, true); } catch (_error) {}
+  try {
+    const pw = await fetchStaffPasswordForAdmin(u.id, true);
+    if (pw && pw.indexOf("sha256:") === 0) {
+      $("sePw").value = "";
+      $("sePw").placeholder = "(暗号化済み - 新しいPWを入力してください)";
+    } else {
+      $("sePw").value = pw || "";
+      $("sePw").placeholder = "";
+    }
+  } catch (_error) {}
   $("staffEditOverlay").style.display = "flex";
 }
 $("staffEditClose").addEventListener("click", () => { $("staffEditOverlay").style.display = "none"; });
@@ -3571,7 +3580,17 @@ renderAdminEdit = function() {
   $("editUname").value = u.name || "";
   $("editUpw").value = "";
   $("editUserType").value = u.userType || "";
-  fillStaffPasswordField("editUpw", u.id);
+  fetchStaffPasswordForAdmin(u.id).then(pw => {
+    const el = $("editUpw");
+    if (!el) return;
+    if (pw && pw.indexOf("sha256:") === 0) {
+      el.value = "";
+      el.placeholder = "(暗号化済み - 管理者が新しいPWを設定してください)";
+    } else {
+      el.value = pw || "";
+      el.placeholder = "";
+    }
+  }).catch(() => {});
 
   const now = new Date();
   const total = countTotal(u);
