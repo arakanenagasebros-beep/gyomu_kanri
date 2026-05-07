@@ -1529,6 +1529,20 @@ function ensureTaskImportControls() {
     });
     addBtn.parentNode.insertBefore(importBtn, addBtn);
   }
+  if (!document.getElementById("atlImportLatestWorkbook")) {
+    const latestBtn = document.createElement("button");
+    latestBtn.id = "atlImportLatestWorkbook";
+    latestBtn.className = "btn success small";
+    latestBtn.textContent = "最新版業務表取込";
+    latestBtn.addEventListener("click", () => {
+      const input = document.getElementById("atlImportLatestWorkbookFile");
+      if (input) {
+        input.value = "";
+        input.click();
+      }
+    });
+    addBtn.parentNode.insertBefore(latestBtn, addBtn);
+  }
   if (!document.getElementById("atlImportFile")) {
     const input = document.createElement("input");
     input.type = "file";
@@ -1538,6 +1552,18 @@ function ensureTaskImportControls() {
     input.addEventListener("change", event => {
       const file = event.target && event.target.files && event.target.files[0];
       importTasksFromFile(file).catch(error => handleDirectActionError(error, "Excel取込に失敗しました"));
+    });
+    addBtn.parentNode.appendChild(input);
+  }
+  if (!document.getElementById("atlImportLatestWorkbookFile")) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "atlImportLatestWorkbookFile";
+    input.accept = ".xlsx";
+    input.style.display = "none";
+    input.addEventListener("change", event => {
+      const file = event.target && event.target.files && event.target.files[0];
+      importLatestTaskWorkbookFromFile(file).catch(error => handleDirectActionError(error, "最新版業務表取込に失敗しました"));
     });
     addBtn.parentNode.appendChild(input);
   }
@@ -2051,6 +2077,326 @@ importTasksFromFile = async function(file) {
   renderAdminTaskList();
   showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
 };
+
+const LATEST_TASK_WORKBOOK_SOURCE = "latestTaskWorkbook";
+const LATEST_TASK_WORKBOOK_SHEETS = ["在宅業務管理", "小笠原さん業務", "諸富さん業務"];
+const LATEST_TASK_SOCIAL_SHEETS = {
+  "小笠原さん業務": "小笠原",
+  "諸富さん業務": "諸富"
+};
+
+function normalizeLatestTaskWorkbookText(value) {
+  return String(value == null ? "" : value).replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeLatestTaskWorkbookKeyText(value) {
+  return normalizeLatestTaskWorkbookText(value).replace(/\s+/g, "");
+}
+
+function normalizeLatestTaskWorkbookHeader(header) {
+  const text = normalizeLatestTaskWorkbookKeyText(header);
+  const map = {
+    "通し番号": "sourceNo",
+    "業務依頼日": "requestDate",
+    "入力日": "requestDate",
+    "期限": "deadline",
+    "優先順位1.最優先2.期間短め（1週間以内）3.通常4.余裕あり（1カ月以上）": "priority",
+    "業務名": "taskType",
+    "工数（業務名の個数）例:テキスト3講分⇒3": "manHours",
+    "業務内容": "content",
+    "備考": "notes",
+    "担当社員": "employee",
+    "担当スタッフ": "staff",
+    "状況": "status",
+    "社員FB": "employeeFeedback",
+    "引継ぎ": "handoff",
+    "テキストコード（ない場合は模試コードそれでもない場合は講座コード）": "textCodes"
+  };
+  return map[text] || "";
+}
+
+function findLatestTaskWorkbookHeaderRowIndex(rows) {
+  let bestIndex = -1;
+  let bestCount = 0;
+  const limit = Math.min(rows.length, 12);
+  for (let i = 0; i < limit; i += 1) {
+    const count = (rows[i] || []).map(normalizeLatestTaskWorkbookHeader).filter(Boolean).length;
+    if (count > bestCount) {
+      bestCount = count;
+      bestIndex = i;
+    }
+  }
+  return bestCount >= 5 ? bestIndex : -1;
+}
+
+function normalizeLatestTaskWorkbookDate(value) {
+  const raw = normalizeLatestTaskWorkbookText(value);
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(raw)) {
+    const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    return `${match[1]}-${pad2(parseInt(match[2], 10) || 0)}-${pad2(parseInt(match[3], 10) || 0)}`;
+  }
+  return normalizeTaskImportValue("requestDate", raw);
+}
+
+function normalizeLatestTaskWorkbookStatus(value) {
+  const raw = normalizeLatestTaskWorkbookText(value);
+  if (!raw) return "依頼前";
+  if (raw === "依頼済" || raw === "着手中" || raw === "対応中") return "依頼中";
+  if (raw === "未依頼") return "依頼前";
+  if (raw === "完了" || raw === "キャンセル" || raw === "依頼中" || raw === "期限超過" || raw === "依頼前") return raw;
+  return raw;
+}
+
+function normalizeLatestTaskWorkbookManHours(value) {
+  const raw = normalizeLatestTaskWorkbookText(value).replace(/,/g, "");
+  const parsed = parseInt(raw, 10);
+  return String(Math.max(1, isNaN(parsed) ? 1 : parsed));
+}
+
+function normalizeLatestTaskWorkbookTextCodes(value) {
+  const raw = normalizeLatestTaskWorkbookText(value);
+  if (!raw) return [];
+  return raw.split(/[,\s、，]+/).map(v => v.replace(/[^0-9]/g, "")).filter(Boolean);
+}
+
+function joinLatestTaskNotes(parts) {
+  return parts
+    .map(part => ({ label: part[0], value: normalizeLatestTaskWorkbookText(part[1]) }))
+    .filter(part => part.value)
+    .map(part => `${part.label}: ${part.value}`)
+    .join("\n");
+}
+
+function latestTaskStaffLabel(task) {
+  return getTaskStaffLabel(task) || task.staff || "";
+}
+
+function latestTaskCanonicalValue(value) {
+  if (Array.isArray(value)) return value.map(v => normalizeLatestTaskWorkbookText(v)).filter(Boolean).join(",");
+  return normalizeLatestTaskWorkbookText(value);
+}
+
+function latestTaskNaturalKey(task) {
+  return [
+    task.workType,
+    task.requestDate,
+    task.deadline,
+    task.taskType,
+    task.manHours,
+    (task.textCodes || []).join(","),
+    task.content,
+    task.employee,
+    latestTaskStaffLabel(task),
+    task.notes
+  ].map(latestTaskCanonicalValue).join("\u001f");
+}
+
+function latestTaskVisibleSignature(task) {
+  return [
+    task.workType,
+    task.status,
+    task.requestDate,
+    task.deadline,
+    task.completionDate,
+    task.manHours,
+    (task.textCodes || []).join(","),
+    task.taskType,
+    task.content,
+    task.employee,
+    latestTaskStaffLabel(task),
+    task.notes
+  ].map(latestTaskCanonicalValue).join("\u001f");
+}
+
+function findLatestTaskMatch(incoming) {
+  const sourceNo = String(incoming.sourceNo || "");
+  const sourceSheet = String(incoming.sourceSheet || "");
+  if (sourceNo && sourceSheet) {
+    const bySource = (data.tasks || []).find(task =>
+      task.sourceWorkbook === LATEST_TASK_WORKBOOK_SOURCE &&
+      String(task.sourceSheet || "") === sourceSheet &&
+      String(task.sourceNo || "") === sourceNo
+    );
+    if (bySource) return bySource;
+  }
+  const key = latestTaskNaturalKey(incoming);
+  return (data.tasks || []).find(task => latestTaskNaturalKey(task) === key) || null;
+}
+
+function createLatestTaskDraft(values, importIndex) {
+  const workType = values.workType || "在宅";
+  const task = createTaskDraft({
+    id: Date.now() + importIndex,
+    seqNum: nextSeqNum(workType),
+    workType,
+    status: values.status || "依頼前",
+    requestDate: values.requestDate || "",
+    deadline: values.deadline || "",
+    completionDate: values.completionDate || "",
+    manHours: values.manHours || "1",
+    textCodes: values.textCodes || [],
+    taskType: values.taskType || "時給",
+    content: values.content || "",
+    employee: values.employee || "",
+    staff: values.staff || "未指定",
+    notes: values.notes || ""
+  });
+  task.sourceWorkbook = LATEST_TASK_WORKBOOK_SOURCE;
+  task.sourceSheet = values.sourceSheet || "";
+  task.sourceNo = values.sourceNo || "";
+  return task;
+}
+
+function mergeLatestTask(existing, incoming) {
+  const preserved = {
+    id: existing.id,
+    seqNum: existing.seqNum,
+    fileNames: Array.isArray(existing.fileNames) ? existing.fileNames : [],
+    fileIds: Array.isArray(existing.fileIds) ? existing.fileIds : [],
+    validPointCount: existing.validPointCount == null ? 0 : existing.validPointCount,
+    vpEditHistory: Array.isArray(existing.vpEditHistory) ? existing.vpEditHistory : []
+  };
+  return Object.assign({}, incoming, preserved);
+}
+
+function recordToLatestTask(record, sheetName, importIndex) {
+  const fixedStaff = LATEST_TASK_SOCIAL_SHEETS[sheetName] || "";
+  const staff = fixedStaff || normalizeLatestTaskWorkbookText(record.staff);
+  const content = normalizeLatestTaskWorkbookText(record.content);
+  const notes = fixedStaff
+    ? joinLatestTaskNotes([["備考", record.notes], ["引継ぎ", record.handoff]])
+    : joinLatestTaskNotes([["備考", record.notes], ["社員FB", record.employeeFeedback]]);
+  const hasTaskBody = content || notes || normalizeLatestTaskWorkbookText(record.taskType);
+  if (!hasTaskBody) return null;
+  if (!staff || !findUserByStaffRef(staff)) return { skippedStaff: staff || "未指定" };
+
+  const workType = fixedStaff ? "出勤" : "在宅";
+  const requestDate = normalizeLatestTaskWorkbookDate(record.requestDate);
+  const deadline = normalizeLatestTaskWorkbookDate(record.deadline);
+  if (!requestDate && !deadline) return null;
+  const status = normalizeLatestTaskWorkbookStatus(record.status);
+  const taskType = fixedStaff ? "時給" : normalizeLatestTaskWorkbookText(record.taskType);
+  const task = createLatestTaskDraft({
+    sourceSheet: sheetName,
+    sourceNo: normalizeLatestTaskWorkbookText(record.sourceNo),
+    workType,
+    status,
+    requestDate,
+    deadline,
+    completionDate: "",
+    manHours: fixedStaff ? "1" : normalizeLatestTaskWorkbookManHours(record.manHours),
+    textCodes: normalizeLatestTaskWorkbookTextCodes(record.textCodes),
+    taskType: taskType || "時給",
+    content,
+    employee: normalizeLatestTaskWorkbookText(record.employee),
+    staff,
+    notes
+  }, importIndex);
+  return { task };
+}
+
+function convertLatestWorkbookRowsToTasks(rowsBySheet) {
+  const incoming = [];
+  const skippedStaff = {};
+  let invalidRows = 0;
+  let importIndex = 1;
+
+  LATEST_TASK_WORKBOOK_SHEETS.forEach(sheetName => {
+    const rows = rowsBySheet[sheetName] || [];
+    const headerIndex = findLatestTaskWorkbookHeaderRowIndex(rows);
+    if (headerIndex < 0) return;
+    const headerMap = rows[headerIndex].map(normalizeLatestTaskWorkbookHeader);
+    for (let i = headerIndex + 1; i < rows.length; i += 1) {
+      const record = {};
+      headerMap.forEach((key, idx) => {
+        if (key) record[key] = rows[i] && rows[i][idx];
+      });
+      const hasAnyValue = Object.values(record).some(value => normalizeLatestTaskWorkbookText(value) !== "");
+      if (!hasAnyValue) continue;
+      const converted = recordToLatestTask(record, sheetName, importIndex);
+      if (!converted) continue;
+      if (converted.skippedStaff) {
+        skippedStaff[converted.skippedStaff] = (skippedStaff[converted.skippedStaff] || 0) + 1;
+        continue;
+      }
+      if (!converted.task || !converted.task.requestDate || !converted.task.deadline) {
+        invalidRows += 1;
+        continue;
+      }
+      incoming.push(converted.task);
+      importIndex += 1;
+    }
+  });
+
+  return { incoming, skippedStaff, invalidRows };
+}
+
+async function importLatestTaskWorkbookFromFile(file) {
+  if (!file) return;
+  if (!/\.xlsx$/i.test(String(file.name || ""))) {
+    showModal({ title: "最新版業務表取込できません", sub: ".xlsx ファイルを選んでください", big: "NG" });
+    return;
+  }
+  let parsed;
+  try {
+    const rowsBySheet = await parseStaffWorkbookRowsBySheet(file, LATEST_TASK_WORKBOOK_SHEETS);
+    parsed = convertLatestWorkbookRowsToTasks(rowsBySheet);
+  } catch (error) {
+    showModal({ title: "最新版業務表取込できません", sub: (error && error.message) || "シート構成を確認してください", big: "NG" });
+    return;
+  }
+
+  let added = 0;
+  let updated = 0;
+  let unchanged = 0;
+  let locked = 0;
+  data.tasks = data.tasks || [];
+  parsed.incoming.forEach(task => {
+    if (isLockedMonth(task.requestDate)) {
+      locked += 1;
+      return;
+    }
+    const existing = findLatestTaskMatch(task);
+    if (!existing) {
+      data.tasks.push(task);
+      added += 1;
+      return;
+    }
+    if (latestTaskVisibleSignature(existing) === latestTaskVisibleSignature(task)) {
+      unchanged += 1;
+      return;
+    }
+    const idx = data.tasks.indexOf(existing);
+    if (idx >= 0) {
+      data.tasks[idx] = mergeLatestTask(existing, task);
+      updated += 1;
+    }
+  });
+
+  if (!added && !updated) {
+    const skipped = Object.keys(parsed.skippedStaff).slice(0, 5).join("、");
+    const sub = [
+      `${unchanged}件は既存と同一`,
+      skipped ? `未登録スタッフ除外: ${skipped}` : "",
+      locked ? `確定済み月 ${locked}件は除外` : ""
+    ].filter(Boolean).join(" / ");
+    showModal({ title: "取込対象がありません", sub: sub || "追加・更新できる業務はありません", big: "NG" });
+    return;
+  }
+
+  saveData(data);
+  renderAdminTaskList();
+  const skippedStaffCount = Object.keys(parsed.skippedStaff).length;
+  const notes = [
+    `追加 ${added}件`,
+    `更新 ${updated}件`,
+    unchanged ? `同一 ${unchanged}件` : "",
+    skippedStaffCount ? `未登録スタッフ ${skippedStaffCount}名は除外` : "",
+    locked ? `確定済み月 ${locked}件は除外` : "",
+    parsed.invalidRows ? `形式不正 ${parsed.invalidRows}件は除外` : ""
+  ].filter(Boolean).join(" / ");
+  showModal({ title: "最新版業務表取込完了", sub: notes, big: "OK" });
+}
 
 const REPORT_IMPORT_TEMPLATE_FILE_NAME = "業務日報一括登録テンプレート.xlsx";
 
