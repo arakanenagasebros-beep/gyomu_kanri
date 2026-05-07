@@ -2397,6 +2397,341 @@ async function importReportsFromFile(file) {
   showModal({ title: "Excel取込完了", sub: `${imported.length}件追加しました`, big: "OK" });
 }
 
+function normalizeStaffWorkbookText(value) {
+  return String(value == null ? "" : value)
+    .replace(/\u3000/g, " ")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function normalizeStaffWorkbookCellText(value) {
+  return String(value == null ? "" : value)
+    .replace(/\u3000/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveStaffWorkbookSheetPath(target) {
+  const raw = String(target || "").replace(/\\/g, "/");
+  if (!raw) return "";
+  if (raw.charAt(0) === "/") return raw.replace(/^\/+/, "");
+  if (/^xl\//i.test(raw)) return raw;
+  return `xl/${raw}`;
+}
+
+function parseStaffWorkbookSheetsXml(workbookXml, relsXml) {
+  const workbookDoc = new DOMParser().parseFromString(String(workbookXml || ""), "application/xml");
+  const relsDoc = new DOMParser().parseFromString(String(relsXml || ""), "application/xml");
+  const rels = {};
+  Array.from(relsDoc.getElementsByTagName("Relationship")).forEach(rel => {
+    const id = rel.getAttribute("Id") || "";
+    if (id) rels[id] = rel.getAttribute("Target") || "";
+  });
+  return Array.from(workbookDoc.getElementsByTagName("sheet")).map(sheet => {
+    const relId = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id") || "";
+    return {
+      name: sheet.getAttribute("name") || "",
+      path: resolveStaffWorkbookSheetPath(rels[relId] || "")
+    };
+  }).filter(sheet => sheet.name && sheet.path);
+}
+
+async function parseStaffWorkbookRowsBySheet(file, sheetNames) {
+  const entries = await readTaskImportZipEntries(await file.arrayBuffer());
+  const workbookXml = entries["xl/workbook.xml"] ? decodeTaskImportBytes(entries["xl/workbook.xml"]) : "";
+  const relsXml = entries["xl/_rels/workbook.xml.rels"] ? decodeTaskImportBytes(entries["xl/_rels/workbook.xml.rels"]) : "";
+  if (!workbookXml || !relsXml) throw new Error("workbook.xml が見つかりません");
+  const sharedStrings = entries["xl/sharedStrings.xml"]
+    ? parseTaskImportSharedStringsXml(decodeTaskImportBytes(entries["xl/sharedStrings.xml"]))
+    : [];
+  const wanted = new Set(sheetNames);
+  const result = {};
+  parseStaffWorkbookSheetsXml(workbookXml, relsXml).forEach(sheet => {
+    if (!wanted.has(sheet.name) || !entries[sheet.path]) return;
+    result[sheet.name] = parseTaskImportSheetXml(decodeTaskImportBytes(entries[sheet.path]), sharedStrings);
+  });
+  return result;
+}
+
+function normalizeStaffWorkbookHeader(header) {
+  const text = normalizeStaffWorkbookText(header);
+  const map = {
+    "スタッフID": "staffNo",
+    "氏名": "staffName",
+    "日付": "date",
+    "出勤or在宅": "workType",
+    "開始時間": "startTime",
+    "終了時間": "endTime",
+    "休憩時間": "breakRaw",
+    "勤務時間": "workHours",
+    "業務種類": "taskType",
+    "工数（業務名の個数）例:テキスト3講分⇒3": "manHours",
+    "交通費": "transport",
+    "業務ＩＤ": "bizId",
+    "業務ID": "bizId",
+    "商品ＩＤ": "productId",
+    "商品ID": "productId",
+    "ｻｰﾋﾞｽＩＤ": "serviceId",
+    "サービスID": "serviceId",
+    "テキストコード": "textCode",
+    "年度": "year",
+    "業務内容": "content",
+    "インセンティブ料金": "incentiveAmount"
+  };
+  return map[text] || "";
+}
+
+function findStaffWorkbookHeaderRowIndex(rows) {
+  let bestIndex = -1;
+  let bestCount = 0;
+  const limit = Math.min(rows.length, 12);
+  for (let i = 0; i < limit; i += 1) {
+    const count = (rows[i] || []).map(normalizeStaffWorkbookHeader).filter(Boolean).length;
+    if (count > bestCount) {
+      bestCount = count;
+      bestIndex = i;
+    }
+  }
+  return bestCount >= 8 ? bestIndex : -1;
+}
+
+function findRegisteredUserForStaffWorkbookRow(record) {
+  const staffName = normalizeStaffWorkbookText(record.staffName);
+  if (!staffName) return null;
+  const users = Object.values(data.users || {}).filter(Boolean);
+  let best = null;
+  let bestScore = 0;
+  users.forEach(user => {
+    const label = normalizeStaffWorkbookText(getUserDisplayName(user));
+    if (!label) return;
+    let score = 0;
+    if (staffName === label) score = 1000 + label.length;
+    else if (staffName.indexOf(label) >= 0) score = 500 + label.length;
+    else if (label.indexOf(staffName) >= 0) score = 200 + staffName.length;
+    if (score > bestScore) {
+      best = user;
+      bestScore = score;
+    }
+  });
+  return best;
+}
+
+function staffWorkbookHoursToMinutes(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return 0;
+  if (/^\d+(\.\d+)?$/.test(raw)) return Math.max(0, Math.round(Number(raw) * 60));
+  const time = normalizeReportImportTimeValue(raw);
+  const match = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) return (parseInt(match[1], 10) || 0) * 60 + (parseInt(match[2], 10) || 0);
+  return 0;
+}
+
+function staffWorkbookTimeToMinutes(value) {
+  const time = normalizeReportImportTimeValue(value);
+  const match = time.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  return (parseInt(match[1], 10) || 0) * 60 + (parseInt(match[2], 10) || 0);
+}
+
+function calculateStaffWorkbookBreakMinutes(record, startTime, endTime) {
+  const workMinutes = staffWorkbookHoursToMinutes(record.workHours);
+  const startMinutes = staffWorkbookTimeToMinutes(startTime);
+  const endMinutes = staffWorkbookTimeToMinutes(endTime);
+  if (workMinutes > 0 && startMinutes != null && endMinutes != null) {
+    const span = Math.max(0, endMinutes - startMinutes);
+    return String(Math.max(0, span - workMinutes));
+  }
+  return String(staffWorkbookHoursToMinutes(record.breakRaw));
+}
+
+function normalizeStaffWorkbookReportValue(value) {
+  return normalizeStaffWorkbookCellText(value).replace(/\t/g, "").trim();
+}
+
+function normalizeStaffWorkbookDateValue(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(raw)) {
+    const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    return `${match[1]}-${pad2(parseInt(match[2], 10) || 0)}-${pad2(parseInt(match[3], 10) || 0)}`;
+  }
+  return normalizeReportImportValue("date", raw);
+}
+
+function buildReportFromStaffWorkbookRecord(record, sheetName) {
+  const date = normalizeStaffWorkbookDateValue(record.date);
+  const startTime = normalizeReportImportTimeValue(record.startTime);
+  const endTime = normalizeReportImportTimeValue(record.endTime);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) return null;
+  const startParts = startTime.split(":");
+  const endParts = endTime.split(":");
+  const workType = sheetName === "在宅管理" || record.workType === "在宅" ? "在宅" : "出勤";
+  const breakMinutes = calculateStaffWorkbookBreakMinutes(record, startTime, endTime);
+  const report = {
+    date,
+    workType,
+    startH: startParts[0],
+    startM: startParts[1],
+    endH: endParts[0],
+    endM: endParts[1],
+    breakTime: breakMinutes,
+    workTime: calcImportedReportWorkTime(startTime, endTime, breakMinutes),
+    taskType: normalizeStaffWorkbookReportValue(record.taskType),
+    manHours: normalizeStaffWorkbookReportValue(record.manHours) || "1",
+    transport: normalizeReportImportValue("transport", record.transport),
+    bizId: normalizeStaffWorkbookReportValue(record.bizId),
+    productId: normalizeStaffWorkbookReportValue(record.productId),
+    serviceId: normalizeStaffWorkbookReportValue(record.serviceId),
+    textCode: normalizeStaffWorkbookReportValue(record.textCode),
+    year: normalizeStaffWorkbookReportValue(record.year),
+    content: normalizeStaffWorkbookReportValue(record.content)
+  };
+  if (workType === "在宅" && record.incentiveAmount != null && String(record.incentiveAmount).trim() !== "") {
+    report.incentiveAmount = Math.max(0, parseInt(String(record.incentiveAmount).replace(/,/g, ""), 10) || 0);
+  }
+  return report;
+}
+
+function getReportDuplicateKey(report) {
+  return [
+    report.date, report.workType, report.startH, report.startM, report.endH, report.endM,
+    report.breakTime, report.taskType, report.manHours, report.transport, report.bizId,
+    report.productId, report.serviceId, report.textCode, report.year, report.content
+  ].map(value => String(value == null ? "" : value)).join("\u001f");
+}
+
+function convertStaffWorkbookRowsToGroupedReports(rowsBySheet) {
+  const grouped = {};
+  const skippedStaff = {};
+  let parsed = 0;
+  let duplicates = 0;
+  let invalidRows = 0;
+  let lockedRows = 0;
+
+  Object.keys(rowsBySheet || {}).forEach(sheetName => {
+    const rows = rowsBySheet[sheetName] || [];
+    const headerRowIndex = findStaffWorkbookHeaderRowIndex(rows);
+    if (headerRowIndex < 0) return;
+    const headerMap = rows[headerRowIndex].map(normalizeStaffWorkbookHeader);
+
+    for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
+      const row = rows[i] || [];
+      const record = {};
+      headerMap.forEach((key, idx) => {
+        if (key) record[key] = row[idx];
+      });
+      if (!record.staffNo || !record.staffName || !record.date) continue;
+      const user = findRegisteredUserForStaffWorkbookRow(record);
+      if (!user) {
+        const name = normalizeStaffWorkbookCellText(record.staffName) || String(record.staffNo || "");
+        skippedStaff[name] = (skippedStaff[name] || 0) + 1;
+        continue;
+      }
+      const report = buildReportFromStaffWorkbookRecord(record, sheetName);
+      if (!report) {
+        invalidRows += 1;
+        continue;
+      }
+      if (isLockedMonth(report.date)) {
+        lockedRows += 1;
+        continue;
+      }
+      const target = grouped[user.id] || { user, reports: [], duplicateKeys: new Set((user.reports || []).map(getReportDuplicateKey)) };
+      const key = getReportDuplicateKey(report);
+      if (target.duplicateKeys.has(key)) {
+        duplicates += 1;
+        grouped[user.id] = target;
+        continue;
+      }
+      target.duplicateKeys.add(key);
+      target.reports.push(report);
+      grouped[user.id] = target;
+      parsed += 1;
+    }
+  });
+
+  return { grouped, skippedStaff, parsed, duplicates, invalidRows, lockedRows };
+}
+
+async function importStaffWorkbookReportsFromFile(file) {
+  if (!file) return;
+  if (!Object.keys(data.users || {}).length) {
+    showModal({ title: "登録スタッフがいません", sub: "先にスタッフ情報を同期してください", big: "NG" });
+    return;
+  }
+  let converted;
+  try {
+    const rowsBySheet = await parseStaffWorkbookRowsBySheet(file, ["出勤管理", "在宅管理"]);
+    converted = convertStaffWorkbookRowsToGroupedReports(rowsBySheet);
+  } catch (error) {
+    showModal({ title: "勤務管理Excelを読めません", sub: (error && error.message) || "出勤管理・在宅管理シートを確認してください", big: "NG" });
+    return;
+  }
+
+  const entries = Object.values(converted.grouped).filter(entry => entry.reports.length);
+  if (!entries.length) {
+    const skippedNames = Object.keys(converted.skippedStaff).slice(0, 5).join("、");
+    const sub = skippedNames
+      ? `登録済みスタッフに一致する新規日報がありません。未登録: ${skippedNames}`
+      : "新規に追加できる日報がありません";
+    showModal({ title: "取込対象がありません", sub, big: "NG" });
+    return;
+  }
+
+  let added = 0;
+  for (const entry of entries) {
+    const reports = entry.reports;
+    for (let i = 0; i < reports.length; i += 100) {
+      const chunk = reports.slice(i, i + 100);
+      await addReportsBatchRemote(entry.user.id, chunk);
+      added += chunk.length;
+    }
+  }
+
+  renderAdminReportMgmt();
+  const skippedStaffCount = Object.keys(converted.skippedStaff).length;
+  const notes = [
+    `${entries.length}名 / ${added}件追加`,
+    skippedStaffCount ? `未登録スタッフ ${skippedStaffCount}名は除外` : "",
+    converted.duplicates ? `重複 ${converted.duplicates}件は除外` : "",
+    converted.lockedRows ? `確定済み月 ${converted.lockedRows}件は除外` : "",
+    converted.invalidRows ? `形式不正 ${converted.invalidRows}件は除外` : ""
+  ].filter(Boolean).join(" / ");
+  showModal({ title: "勤務管理Excel取込完了", sub: notes, big: "OK" });
+}
+
+function ensureStaffWorkbookImportControls() {
+  const exportBtn = $("armExportExcel");
+  const actions = exportBtn && exportBtn.parentNode;
+  if (!exportBtn || !actions) return;
+  if (!document.getElementById("armImportStaffWorkbook")) {
+    const importBtn = document.createElement("button");
+    importBtn.id = "armImportStaffWorkbook";
+    importBtn.className = "btn small";
+    importBtn.textContent = "勤務管理Excel取込";
+    importBtn.addEventListener("click", () => {
+      const input = document.getElementById("armImportStaffWorkbookFile");
+      if (input) {
+        input.value = "";
+        input.click();
+      }
+    });
+    actions.insertBefore(importBtn, exportBtn);
+  }
+  if (!document.getElementById("armImportStaffWorkbookFile")) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "armImportStaffWorkbookFile";
+    input.accept = ".xlsx";
+    input.style.display = "none";
+    input.addEventListener("change", event => {
+      const file = event.target && event.target.files && event.target.files[0];
+      importStaffWorkbookReportsFromFile(file).catch(error => handleDirectActionError(error, "勤務管理Excel取込に失敗しました"));
+    });
+    actions.appendChild(input);
+  }
+}
+
 function ensureReportImportControls() {
   const exportBtn = $("ardExport");
   const actions = exportBtn && exportBtn.parentNode;
@@ -4140,6 +4475,7 @@ renderAdminReportMgmt = function() {
   if (addUserCard) addUserCard.remove();
   const summaryCard = document.getElementById("armSummaryCard");
   if (summaryCard) summaryCard.classList.remove("hidden");
+  ensureStaffWorkbookImportControls();
   renderAdminGlobalDashboard("adminReportMgmt", "adminReportMgmtNav", "report");
 };
 
