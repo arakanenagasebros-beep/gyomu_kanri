@@ -4,7 +4,7 @@ const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHom
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var lo=document.getElementById("lotteryOverlay");if(lo)lo.style.display="none";var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var sp=document.getElementById("staffPasswordOverlay");if(sp)sp.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none"}});
-$("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
+$("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;const prize=Number($("lotteryOverlay").dataset.prize);cb(isNaN(prize)?0:prize)}});
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
@@ -96,8 +96,8 @@ try{const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/
 u.stamps[key]=true;saveData(data);const mk=ym(now);let monthFirstMsg=null;
 if(u.lastMonthFirstStamp!==mk){u.lastMonthFirstStamp=mk;const ps=addMonths(startOfMonth(now),-1),pe=endOfMonth(ps),pc=countRangeDays(u,ps,pe);
 monthFirstMsg={title:"先月の振り返り",sub:`先月の出勤回数：${pc}回`,body:getMonthlyComment(pc),big:"👏",small:`${monthLabelJa(ps)}おつかれさまでした！`};saveData(data)}
-const lotteryTrigger=Math.random()<.33;
-const afterStamp=bp=>{if(bp&&bp>1){u.bonusPoints=(u.bonusPoints||0)+(bp-1);saveData(data)}
+const lotteryTrigger=Object.values(u.stamps||{}).filter(Boolean).length%3===0;
+const afterStamp=bp=>{if(bp===2){u.stamps[key]="emergency";saveData(data)}
 const total=countTotal(u);const m50=Math.floor(total/50);
 if(m50>0&&m50>(u.lastCongrats50||0)){u.lastCongrats50=m50;saveData(data);showConfetti();showModalCb({title:"🎊 おめでとう！",sub:`累計 ${m50*50}pt`,body:"お礼の1万円！",big:"💰",small:"これからもよろしく！"},()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});return}
 if(monthFirstMsg){showModalCb(monthFirstMsg,()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});return}
@@ -1525,22 +1525,28 @@ async function handleStaffStampDirect() {
   }
 
   const afterStamp = async bonusPoint => {
-    if (bonusPoint && bonusPoint > 1) {
-      syncedUser.bonusPoints = (syncedUser.bonusPoints || 0) + (bonusPoint - 1);
-      metaPatch.bonusPoints = syncedUser.bonusPoints;
+    let currentUser = data.users[data.session.userId] || syncedUser;
+    if (bonusPoint === 2) {
+      try {
+        await setStampRemote(currentUser.id, key, "emergency");
+        currentUser = data.users[data.session.userId] || currentUser;
+      } catch (error) {
+        handleDirectActionError(error, "緊急スタンプへの変更に失敗しました");
+        return;
+      }
     }
 
-    const total = countTotal(syncedUser);
+    const total = countTotal(currentUser);
     const milestone = Math.floor(total / 50);
     const reachedMilestone = milestone > 0 && milestone > prevCongrats;
     if (reachedMilestone) {
-      syncedUser.lastCongrats50 = milestone;
+      currentUser.lastCongrats50 = milestone;
       metaPatch.lastCongrats50 = milestone;
     }
 
     if (Object.keys(metaPatch).length) {
       try {
-        await setStampMetaRemote(syncedUser.id, metaPatch);
+        await setStampMetaRemote(currentUser.id, metaPatch);
       } catch (error) {
         handleDirectActionError(error, "スタンプ付帯情報の保存に失敗しました");
         return;
@@ -1583,7 +1589,8 @@ async function handleStaffStampDirect() {
     });
   };
 
-  if (Math.random() < 0.33) {
+  const stampDays = Object.values((data.users[data.session.userId] || syncedUser).stamps || {}).filter(Boolean).length;
+  if (stampDays > 0 && stampDays % 3 === 0) {
     startLottery(point => {
       afterStamp(point).catch(error => handleDirectActionError(error, "スタンプ付帯情報の保存に失敗しました"));
     });

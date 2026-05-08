@@ -1374,11 +1374,11 @@ function showConfetti(){const c=document.createElement("div");c.className="confe
 /* === LOTTERY === */
 var lotteryCb=null;
 function startLottery(cb){lotteryCb=cb;var lo=$("lotteryOverlay");lo.style.display="flex";$("lotteryResult").textContent="";$("lotteryClose").classList.add("hidden");$("lotteryCards").innerHTML="";
-const roll=Math.random();let prize=roll<.01?5:roll<.11?2:1;const vals=[5,2,1,1,1];for(let i=vals.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]]}
-let chosen=false;lo.dataset.prize=prize;
+const vals=[0,0,0,0,2];for(let i=vals.length-1;i>0;i--){const j=~~(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]]}
+let chosen=false;lo.dataset.prize="0";
 vals.forEach(dv=>{const card=document.createElement("div");card.className="lottery-card";const vd=document.createElement("div");vd.className="card-val";vd.innerHTML=`<span class="pt-num">${dv}</span><span>pt</span>`;card.appendChild(vd);
-card.addEventListener("click",()=>{if(chosen)return;chosen=true;vd.innerHTML=`<span class="pt-num">${prize}</span><span>pt</span>`;card.classList.add("selected","revealed");
-$("lotteryCards").querySelectorAll(".lottery-card").forEach(c=>{if(c!==card)c.classList.add("disabled")});$("lotteryResult").textContent=`🎉 ${prize}pt ゲット！`;
+card.addEventListener("click",()=>{if(chosen)return;chosen=true;lo.dataset.prize=String(dv);card.classList.add("selected","revealed");
+$("lotteryCards").querySelectorAll(".lottery-card").forEach(c=>{if(c!==card)c.classList.add("disabled")});$("lotteryResult").textContent=dv>0?`🎉 ${dv}pt ゲット！緊急スタンプにランクアップ！`:"今回は0pt。また次回チャレンジ！";
 setTimeout(()=>{$("lotteryCards").querySelectorAll(".lottery-card").forEach(c=>{if(c!==card){c.classList.remove("disabled");c.classList.add("revealed")}});$("lotteryClose").classList.remove("hidden")},1200)});
 $("lotteryCards").appendChild(card)})}
 

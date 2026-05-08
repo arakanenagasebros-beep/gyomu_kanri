@@ -25,7 +25,7 @@ let monthCheckShouldReset = false;
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){hideModal();var fo=document.getElementById("fileOverlay");if(fo)fo.style.display="none";var ta=document.getElementById("taskAddOverlay");if(ta)ta.style.display="none";var dd=document.getElementById("ddEditOverlay");if(dd)dd.style.display="none";var _ao=document.getElementById("apiSetupOverlay");if(_ao)_ao.style.display="none";var se=document.getElementById("staffEditOverlay");if(se)se.style.display="none"}});
-$("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;cb(parseInt($("lotteryOverlay").dataset.prize)||1)}});
+$("lotteryClose").addEventListener("click",()=>{$("lotteryOverlay").style.display="none";if(lotteryCb){const cb=lotteryCb;lotteryCb=null;const prize=Number($("lotteryOverlay").dataset.prize);cb(isNaN(prize)?0:prize)}});
 
 /* === ROUTER === */
 function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));views[v].classList.remove("hidden")}
@@ -140,8 +140,8 @@ try{const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/
 u.stamps[key]=true;saveData(data);const mk=ym(now);let monthFirstMsg=null;
 if(u.lastMonthFirstStamp!==mk){u.lastMonthFirstStamp=mk;const ps=addMonths(startOfMonth(now),-1),pe=endOfMonth(ps),pc=countRangeDays(u,ps,pe);
 monthFirstMsg={title:"先月の振り返り",sub:`先月の出勤回数：${pc}回`,body:getMonthlyComment(pc),big:"👏",small:`${monthLabelJa(ps)}おつかれさまでした！`};saveData(data)}
-const lotteryTrigger=Math.random()<.33;
-const afterStamp=bp=>{if(bp&&bp>1){u.bonusPoints=(u.bonusPoints||0)+(bp-1);saveData(data)}
+const lotteryTrigger=Object.values(u.stamps||{}).filter(Boolean).length%3===0;
+const afterStamp=bp=>{if(bp===2){u.stamps[key]="emergency";saveData(data)}
 const total=countTotal(u);const m50=Math.floor(total/50);
 if(m50>0&&m50>(u.lastCongrats50||0)){u.lastCongrats50=m50;saveData(data);showConfetti();showModalCb({title:"🎊 おめでとう！",sub:`累計 ${m50*50}pt`,body:"お礼の1万円！",big:"💰",small:"これからもよろしく！"},()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});return}
 if(monthFirstMsg){showModalCb(monthFirstMsg,()=>{userMonthCursor=startOfMonth(new Date());location.hash="#user"});return}
