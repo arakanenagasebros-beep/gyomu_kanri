@@ -498,7 +498,7 @@ function initSync() {
 }
 
 /* === DRIVE FILE UPLOAD === */
-async function uploadFileToDrive(file, taskId) {
+async function uploadFileToDrive(file, taskId, uploadMode) {
   if (!API_URL) return null;
   return new Promise(function(resolve) {
     var reader = new FileReader();
@@ -508,7 +508,7 @@ async function uploadFileToDrive(file, taskId) {
         var resp = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ _action: "uploadFile", token: getToken(), taskId: taskId || "", fileName: file.name, mimeType: file.type || "application/octet-stream", data: b64 }),
+          body: JSON.stringify({ _action: "uploadFile", token: getToken(), taskId: taskId || "", uploadMode: uploadMode || "", fileName: file.name, mimeType: file.type || "application/octet-stream", data: b64 }),
           redirect: "follow"
         });
         var result = await resp.json();
@@ -1218,7 +1218,7 @@ function createTaskDraft(values){
 function applyTaskDraft(task,values){
   if(!task)task={};
   values=values||{};
-  task.workType=String(values.workType||task.workType||"出勤");
+  task.workType=String(values.workType||task.workType||"在宅");
   task.status=String(values.status||task.status||"依頼前");
   task.requestDate=String(values.requestDate||"");
   task.deadline=String(values.deadline||"");
@@ -1238,7 +1238,7 @@ function applyTaskDraft(task,values){
 }
 function createTaskDraft(values){
   values=values||{};
-  const workType=String(values.workType||"出勤");
+  const workType=String(values.workType||"在宅");
   const task={
     id:values.id!=null?values.id:Date.now(),
     seqNum:values.seqNum!=null?values.seqNum:nextSeqNum(workType)

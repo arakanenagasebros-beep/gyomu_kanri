@@ -789,6 +789,25 @@ function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
   });
 }
 
+function completeTaskFromAdmin(t){
+  if(!t)return;
+  if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は編集できません`,big:"NG"});return}
+  if(!confirm("この業務を完了にしますか？"))return;
+  t.status="完了";
+  t.completionDate=t.completionDate||ymd(new Date());
+  saveData(data);
+  renderAdminTaskList();
+  showModal({title:"完了にしました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
+}
+function appendAdminCompleteButton(container,t){
+  if(!container||!t||t.status==="完了"||t.status==="キャンセル")return;
+  const completeBtn=document.createElement("button");
+  completeBtn.className="btn success small";
+  completeBtn.textContent="✅ 完了";
+  completeBtn.addEventListener("click",()=>completeTaskFromAdmin(t));
+  container.appendChild(completeBtn);
+}
+
 function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
   theadEl.innerHTML=`<tr><th>No</th><th>状況</th><th>形態</th><th>依頼日</th><th>期限日</th><th>完了日</th><th>ﾃｷｽﾄｺｰﾄﾞ</th><th>業務種類</th><th>工数</th><th>内容</th><th>担当社員</th><th>担当ｽﾀｯﾌ</th><th>備考</th><th>有効指摘</th><th>提出</th>${isAdmin?"<th>削除</th>":""}</tr>`;
   tbodyEl.innerHTML="";
@@ -840,8 +859,10 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       // === ADMIN side ===
       if(t.status==="依頼前"){
         // 依頼前: show "依頼中に変更" button (opens file upload in admin-irai mode)
+        const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
         const btn=document.createElement("button");btn.className="btn primary small";btn.textContent="📨 依頼中に変更";
-        btn.addEventListener("click",()=>openFileUpload(t,"admin-irai"));tdSub.appendChild(btn);
+        btn.addEventListener("click",()=>openFileUpload(t,"admin-irai"));wrap.appendChild(btn);
+        appendAdminCompleteButton(wrap,t);tdSub.appendChild(wrap);
       } else if(t.status==="依頼中"||t.status==="期限超過"){
         // 依頼中/期限超過: show DL button (if files exist) + file attach button
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -860,6 +881,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         }
         const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
         attBtn.addEventListener("click",()=>openFileUpload(t,"admin-attach"));wrap.appendChild(attBtn);
+        appendAdminCompleteButton(wrap,t);
         tdSub.appendChild(wrap);
       } else if(t.status==="完了"){
         // 完了: DL + 依頼中に戻す
@@ -988,6 +1010,9 @@ function renderFileList(){
 }
 function openFileUpload(task,mode){fileUploadMode=mode||"staff";fileUploadTask=task;pendingFiles=[];renderFileList();
 $("fileOverlay").style.display="flex";$("fileInput").value="";
+const fileTitle=document.querySelector("#fileOverlay h3");const fileSub=document.querySelector("#fileOverlay .sub");
+if(fileTitle)fileTitle.textContent=fileUploadMode==="staff"?"📎 完了ファイル提出":"📎 業務ファイル共有";
+if(fileSub)fileSub.textContent=fileUploadMode==="staff"?"PDF・Excel・スライドなどを担当スタッフの完了済フォルダへ保存します":"PDF・Excel・スライドなどを担当スタッフのフォルダへ保存します";
 // Adjust button labels based on mode
 if(fileUploadMode==="admin-attach"){$("fileSubmitBtn").textContent="ファイル添付 ✅";$("fileSubmitDirectBtn").textContent="添付せず閉じる"}
 else if(fileUploadMode==="admin-irai"){$("fileSubmitBtn").textContent="依頼中に変更 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで依頼中に変更"}
@@ -1006,7 +1031,7 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
     var f=pendingFiles[i];
     if(!fileUploadTask.fileNames)fileUploadTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f, fileUploadTask.id);
+      var result=await uploadFileToDrive(f, fileUploadTask.id, fileUploadMode);
       if(result){fileUploadTask.fileNames.push(result.fileName);if(!fileUploadTask.fileIds)fileUploadTask.fileIds=[];fileUploadTask.fileIds.push(result.fileId);}
       else{fileUploadTask.fileNames.push(f.name+"(アップロード失敗)");}
     }else{fileUploadTask.fileNames.push(f.name);}
@@ -1036,7 +1061,7 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
     var f=pendingFiles[i];
     if(!baseTask.fileNames)baseTask.fileNames=[];
     if(API_URL){
-      var result=await uploadFileToDrive(f, baseTask.id);
+      var result=await uploadFileToDrive(f, baseTask.id, fileUploadMode);
       if(result){baseTask.fileNames.push(result.fileName);if(!baseTask.fileIds)baseTask.fileIds=[];baseTask.fileIds.push(result.fileId);}
       else{baseTask.fileNames.push(f.name);}
     }else{baseTask.fileNames.push(f.name);}
@@ -1086,7 +1111,7 @@ function applyTaskTypeLogic(){
 }
 function openTaskAdd(){editingTaskId=null;$("taskAddTitle").textContent="📑 新規業務追加";
 const now=new Date();const week=addDays(now,7);
-$("taWorkType").value="出勤";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value="";$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
+$("taWorkType").value="在宅";$("taStatus").value="依頼前";$("taRequestDate").value=ymd(now);$("taDeadline").value=ymd(week);$("taCompletionDate").value="";$("taManHours").value="1";$("taContent").value="";$("taNote").value="";
 popSel($("taTaskType"),getTaskTypes());popSel($("taEmployee"),getEmployees());
 populateStaffSelect($("taStaff"),"未指定");
 applyTaskTypeLogic();
@@ -2270,7 +2295,7 @@ function recordToLatestTask(record, sheetName, importIndex) {
   if (!hasTaskBody) return null;
   if (!staff || !findUserByStaffRef(staff)) return { skippedStaff: staff || "未指定" };
 
-  const workType = fixedStaff ? "出勤" : "在宅";
+  const workType = "在宅";
   const requestDate = normalizeLatestTaskWorkbookDate(record.requestDate);
   const deadline = normalizeLatestTaskWorkbookDate(record.deadline);
   if (!requestDate && !deadline) return null;
@@ -2329,6 +2354,18 @@ function convertLatestWorkbookRowsToTasks(rowsBySheet) {
   });
 
   return { incoming, skippedStaff, invalidRows };
+}
+
+function normalizeLatestWorkbookTaskWorkTypesForAdmin(){
+  let changed=false;
+  (data.tasks||[]).forEach(task=>{
+    if(task&&task.sourceWorkbook===LATEST_TASK_WORKBOOK_SOURCE&&task.workType!=="在宅"){
+      task.workType="在宅";
+      changed=true;
+    }
+  });
+  if(changed)saveData(data);
+  return changed;
 }
 
 async function importLatestTaskWorkbookFromFile(file) {
@@ -2422,7 +2459,7 @@ function getReportImportHeaders() {
 function getReportImportDefaults() {
   return {
     date: ymd(new Date()),
-    workType: "出勤",
+    workType: "在宅",
     startTime: "",
     endTime: "",
     breakMinutes: "0",
@@ -3177,6 +3214,7 @@ function getAdminTaskSubTabs(){
 }
 function renderAdminTaskList(){
   renderAdminNotifications();
+  if(typeof normalizeLatestWorkbookTaskWorkTypesForAdmin==="function")normalizeLatestWorkbookTaskWorkTypesForAdmin();
   renderWorkload($("atlWorkloadArea"),null);
   if(!atlInit){buildTaskFilterSelects($("atlYear"),$("atlMonth"),$("atlStaff"),$("atlEmployee"));atlInit=true}
   if(atlShouldReset){
