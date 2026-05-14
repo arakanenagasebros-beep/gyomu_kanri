@@ -161,6 +161,8 @@ function stripSensitiveFieldsFromData(clean) {
   Object.keys(users).forEach(uid => {
     const user = users[uid];
     if (user && Object.prototype.hasOwnProperty.call(user, "pw")) delete user.pw;
+    if (user && Object.prototype.hasOwnProperty.call(user, "pwHash")) delete user.pwHash;
+    if (user && Object.prototype.hasOwnProperty.call(user, "salt")) delete user.salt;
   });
   return clean;
 }
@@ -770,6 +772,130 @@ function fillStaffPasswordField(fieldId, userId, forceRefresh = false) {
   if (!input) return;
   input.value = "";
   input.placeholder = "(変更しない場合は空欄)";
+}
+
+function canRequestWorkTypeChange(task) {
+  return !!task && (task.status === "依頼中" || task.status === "期限超過");
+}
+
+function getPendingWorkTypeChangeRequest(task) {
+  const req = task && task.workTypeChangeRequest;
+  return req && req.status === "pending" && req.requestedWorkType && req.requestedWorkType !== task.workType ? req : null;
+}
+
+function renderTaskWorkTypeCell(task, isAdmin) {
+  const td = document.createElement("td");
+  const current = task && task.workType ? task.workType : "";
+  const pending = getPendingWorkTypeChangeRequest(task);
+  const req = (task && task.workTypeChangeRequest) || null;
+  const label = document.createElement("div");
+  label.textContent = current || "-";
+  label.style.fontWeight = "900";
+  td.appendChild(label);
+
+  if (pending) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:10px;color:var(--orange);margin-top:3px;";
+    note.textContent = `変更申請: ${pending.currentWorkType || current} → ${pending.requestedWorkType}`;
+    td.appendChild(note);
+
+    if (isAdmin) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;";
+      if (canRequestWorkTypeChange(task)) {
+        const approve = document.createElement("button");
+        approve.className = "btn success small";
+        approve.type = "button";
+        approve.textContent = "許可";
+        approve.addEventListener("click", event => {
+          event.stopPropagation();
+          if (isLockedMonth(task.requestDate)) {
+            showModal({ title: "確定済みの月です", sub: `${getMonthLockKey(task.requestDate)} は編集できません`, big: "NG" });
+            return;
+          }
+          if (!confirm(`業務形態を「${pending.requestedWorkType}」に変更しますか？`)) return;
+          task.workType = pending.requestedWorkType;
+          task.workTypeChangeRequest = {
+            status: "approved",
+            currentWorkType: pending.currentWorkType || current,
+            requestedWorkType: pending.requestedWorkType,
+            requestedAt: pending.requestedAt || Date.now(),
+            requestedBy: pending.requestedBy || "",
+            resolvedAt: Date.now()
+          };
+          saveData(data);
+          if (typeof renderAdminTaskList === "function") renderAdminTaskList();
+          showModal({ title: "変更を許可しました", sub: "業務形態を更新しました。", big: "OK" });
+        });
+        wrap.appendChild(approve);
+      } else {
+        const locked = document.createElement("span");
+        locked.style.cssText = "font-size:10px;color:var(--muted);";
+        locked.textContent = "この状態では許可不可";
+        wrap.appendChild(locked);
+      }
+      const reject = document.createElement("button");
+      reject.className = "btn danger small";
+      reject.type = "button";
+      reject.textContent = "却下";
+      reject.addEventListener("click", event => {
+        event.stopPropagation();
+        if (!confirm("この業務形態変更申請を却下しますか？")) return;
+        task.workTypeChangeRequest = {
+          status: "rejected",
+          currentWorkType: pending.currentWorkType || current,
+          requestedWorkType: pending.requestedWorkType,
+          requestedAt: pending.requestedAt || Date.now(),
+          requestedBy: pending.requestedBy || "",
+          resolvedAt: Date.now()
+        };
+        saveData(data);
+        if (typeof renderAdminTaskList === "function") renderAdminTaskList();
+        showModal({ title: "申請を却下しました", big: "NG" });
+      });
+      wrap.appendChild(reject);
+      td.appendChild(wrap);
+    }
+    return td;
+  }
+
+  if (!isAdmin) {
+    if (req && req.status === "approved") {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:10px;color:var(--mint);margin-top:3px;";
+      note.textContent = "変更承認済み";
+      td.appendChild(note);
+    } else if (req && req.status === "rejected") {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:10px;color:var(--red);margin-top:3px;";
+      note.textContent = "変更申請は却下されました";
+      td.appendChild(note);
+    }
+    if (canRequestWorkTypeChange(task)) {
+      const other = current === "出勤" ? "在宅" : "出勤";
+      const btn = document.createElement("button");
+      btn.className = "btn ghost small";
+      btn.type = "button";
+      btn.style.marginTop = "4px";
+      btn.textContent = `${other}へ変更申請`;
+      btn.addEventListener("click", event => {
+        event.stopPropagation();
+        if (!confirm(`業務形態を「${other}」へ変更申請しますか？`)) return;
+        task.workTypeChangeRequest = {
+          status: "pending",
+          currentWorkType: current,
+          requestedWorkType: other,
+          requestedAt: Date.now(),
+          requestedBy: data.session.userId || ""
+        };
+        saveData(data);
+        if (typeof renderStaffTaskList === "function") renderStaffTaskList();
+        showModal({ title: "変更申請を送りました", sub: "管理者の許可後に業務形態が変更されます。", big: "OK" });
+      });
+      td.appendChild(btn);
+    }
+  }
+  return td;
 }
 
 function isUnsupportedDirectActionError(error) {

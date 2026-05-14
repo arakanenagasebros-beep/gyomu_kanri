@@ -216,6 +216,30 @@ function isTaskAccessibleByAuth_(task, auth, data) {
   if (auth.role === "admin") return true;
   return getTaskAssignedUserId_(task, data) === auth.userId;
 }
+function isWorkTypeChangeAllowed_(task) {
+  return task && (task.status === "依頼中" || task.status === "期限超過");
+}
+function buildStaffWorkTypeChangeRequest_(existingTask, incomingReq, auth) {
+  if (!incomingReq) return null;
+  if (!isWorkTypeChangeAllowed_(existingTask)) {
+    throw new Error("workType change is only allowed while task is in progress");
+  }
+  var requested = String(incomingReq.requestedWorkType || "").trim();
+  if (requested !== "出勤" && requested !== "在宅") {
+    throw new Error("invalid requested workType");
+  }
+  var current = String(existingTask.workType || "");
+  if (!current || requested === current) {
+    throw new Error("requested workType must differ from current workType");
+  }
+  return {
+    status: "pending",
+    currentWorkType: current,
+    requestedWorkType: requested,
+    requestedAt: Date.now(),
+    requestedBy: auth && auth.userId ? String(auth.userId) : ""
+  };
+}
 function sanitizeUserForStaffRead_(user, isSelf) {
   if (!user) return null;
   if (!isSelf) {
@@ -1224,7 +1248,18 @@ function doPost(e) {
           if (body.task && Array.isArray(body.task.fileIds)) nextTask.fileIds = body.task.fileIds;
           if (body.task && (body.task.status === "提出中" || body.task.status === "依頼中")) nextTask.status = body.task.status;
           if (body.task && Object.prototype.hasOwnProperty.call(body.task, "completionDate")) nextTask.completionDate = body.task.completionDate;
-          if (body.task && Object.prototype.hasOwnProperty.call(body.task, "workTypeChangeRequest")) nextTask.workTypeChangeRequest = body.task.workTypeChangeRequest;
+          if (body.task && Object.prototype.hasOwnProperty.call(body.task, "workTypeChangeRequest")) {
+            var incomingWorkTypeReq = body.task.workTypeChangeRequest;
+            if (incomingWorkTypeReq && incomingWorkTypeReq.status === "pending") {
+              try {
+                nextTask.workTypeChangeRequest = buildStaffWorkTypeChangeRequest_(existingTask, incomingWorkTypeReq, gate.auth);
+              } catch (reqErr) {
+                return { ok: false, error: reqErr.message };
+              }
+            } else {
+              nextTask.workTypeChangeRequest = existingTask.workTypeChangeRequest || null;
+            }
+          }
           currentData2.tasks[tIdx] = nextTask;
           return writeData_(currentData2);
         }
