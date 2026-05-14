@@ -1259,7 +1259,7 @@ function renderWorkload(container,staffFilter){
     const user=findUserByStaffRef(staffRef);
     const label=user?getUserDisplayName(user):String(staffRef);
     const name=label;
-    const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffRef)&&(t.status==="依頼中"||t.status==="期限超過"));
+    const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffRef)&&(t.status==="依頼中"||t.status==="提出中"||t.status==="期限超過"));
     const irai=active.filter(t=>t.status==="依頼中").length;
     const kigen=active.filter(t=>t.status==="期限超過").length;
     const autoSt=autoWorkloadStatus(staffRef);
@@ -1285,7 +1285,7 @@ function checkOverdue(){const today=ymd(new Date());let changed=false;data.tasks
 
 /* Auto workload status */
 function autoWorkloadStatus(staffName){
-  const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffName)&&(t.status==="依頼中"||t.status==="期限超過")).length;
+  const active=data.tasks.filter(t=>taskMatchesStaffRef(t,staffName)&&(t.status==="依頼中"||t.status==="提出中"||t.status==="期限超過")).length;
   const tp=getUserTypeByStaffName(staffName);
   if(tp==="社会人"){
     if(active>=3)return"厳しい";

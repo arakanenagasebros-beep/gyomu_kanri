@@ -793,18 +793,18 @@ function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
 function completeTaskFromAdmin(t){
   if(!t)return;
   if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は編集できません`,big:"NG"});return}
-  if(!confirm("この業務を完了にしますか？"))return;
+  if(!confirm("この提出を受領して完了にしますか？"))return;
   t.status="完了";
   t.completionDate=t.completionDate||ymd(new Date());
   saveData(data);
   renderAdminTaskList();
-  showModal({title:"完了にしました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
+  showModal({title:"受領しました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
 }
 function appendAdminCompleteButton(container,t){
-  if(!container||!t||t.status==="完了"||t.status==="キャンセル")return;
+  if(!container||!t||t.status!=="提出中")return;
   const completeBtn=document.createElement("button");
   completeBtn.className="btn success small";
-  completeBtn.textContent="✅ 完了";
+  completeBtn.textContent="受領";
   completeBtn.addEventListener("click",()=>completeTaskFromAdmin(t));
   container.appendChild(completeBtn);
 }
@@ -884,6 +884,25 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         attBtn.addEventListener("click",()=>openFileUpload(t,"admin-attach"));wrap.appendChild(attBtn);
         appendAdminCompleteButton(wrap,t);
         tdSub.appendChild(wrap);
+      } else if(t.status==="提出中"){
+        const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
+        if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
+          const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              downloadTaskFiles(t);
+            }
+          });
+          wrap.appendChild(dlBtn);
+        }
+        const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
+        attBtn.addEventListener("click",()=>openFileUpload(t,"admin-attach"));wrap.appendChild(attBtn);
+        appendAdminCompleteButton(wrap,t);
+        tdSub.appendChild(wrap);
       } else if(t.status==="完了"){
         // 完了: DL + 依頼中に戻す
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -925,6 +944,16 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         // Submit button
         const btn=document.createElement("button");btn.className="btn success small";btn.textContent="📎提出";
         btn.addEventListener("click",()=>openFileUpload(t,"staff"));wrap.appendChild(btn);
+        tdSub.appendChild(wrap);
+      } else if(t.status==="提出中"){
+        const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
+        const span=document.createElement("span");span.style.fontSize="10px";span.style.color="var(--purple)";
+        const fnames=(t.fileNames&&t.fileNames.length)?t.fileNames.join(", "):"提出中";
+        span.textContent="提出中: "+fnames;wrap.appendChild(span);
+        if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
+          const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
+          dlBtn.addEventListener("click",()=>downloadTaskFiles(t));wrap.appendChild(dlBtn);
+        }
         tdSub.appendChild(wrap);
       } else if(t.status==="完了"){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -1012,12 +1041,12 @@ function renderFileList(){
 function openFileUpload(task,mode){fileUploadMode=mode||"staff";fileUploadTask=task;pendingFiles=[];renderFileList();
 $("fileOverlay").style.display="flex";$("fileInput").value="";
 const fileTitle=document.querySelector("#fileOverlay h3");const fileSub=document.querySelector("#fileOverlay .sub");
-if(fileTitle)fileTitle.textContent=fileUploadMode==="staff"?"📎 完了ファイル提出":"📎 業務ファイル共有";
-if(fileSub)fileSub.textContent=fileUploadMode==="staff"?"PDF・Excel・スライドなどを担当スタッフの完了済フォルダへ保存します":"PDF・Excel・スライドなどを担当スタッフのフォルダへ保存します";
+if(fileTitle)fileTitle.textContent=fileUploadMode==="staff"?"📎 提出ファイル添付":"📎 業務ファイル共有";
+if(fileSub)fileSub.textContent=fileUploadMode==="staff"?"PDF・Excel・スライドなどを添付して管理者へ提出します":"PDF・Excel・スライドなどを担当スタッフのフォルダへ保存します";
 // Adjust button labels based on mode
 if(fileUploadMode==="admin-attach"){$("fileSubmitBtn").textContent="ファイル添付 ✅";$("fileSubmitDirectBtn").textContent="添付せず閉じる"}
 else if(fileUploadMode==="admin-irai"){$("fileSubmitBtn").textContent="依頼中に変更 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで依頼中に変更"}
-else{$("fileSubmitBtn").textContent="完了 ✅";$("fileSubmitDirectBtn").textContent="提出（ファイルなしでも完了）"}}
+else{$("fileSubmitBtn").textContent="提出 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで提出"}}
 $("fileOverlayClose").addEventListener("click",()=>{$("fileOverlay").style.display="none"});
 const dz=$("dropZone");
 dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over")});
@@ -1049,9 +1078,9 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
     const names=(fileUploadTask.fileNames||[]).join(", ");fileUploadTask=null;
     showModalCb({title:"依頼中に変更しました",sub:names||"ファイルなし",big:"📨"},()=>renderAdminTaskList());
   } else {
-    fileUploadTask.status="完了";fileUploadTask.completionDate=ymd(new Date());saveData(data);$("fileOverlay").style.display="none";
+    fileUploadTask.status="提出中";fileUploadTask.completionDate="";saveData(data);$("fileOverlay").style.display="none";
     const names=(fileUploadTask.fileNames||[]).join(", ");fileUploadTask=null;
-    showModalCb({title:"提出完了！",sub:names,big:"✅"},()=>{
+    showModalCb({title:"提出しました",sub:"管理者の受領待ちです"+(names?`：${names}`:""),big:"✅"},()=>{
       if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList()});
   }});
 
@@ -1076,11 +1105,11 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
     baseTask.status="依頼中";saveData(data);$("fileOverlay").style.display="none";fileUploadTask=null;
     showModalCb({title:"依頼中に変更しました",sub:"ファイルなし",big:"📨"},()=>renderAdminTaskList());
   } else {
-    baseTask.status="完了";baseTask.completionDate=ymd(new Date());
+    baseTask.status="提出中";baseTask.completionDate="";
     if(!baseTask.fileNames||baseTask.fileNames.length===0) baseTask.fileNames=["（ファイルなし）"];
     saveData(data);$("fileOverlay").style.display="none";fileUploadTask=null;
     const names=(baseTask.fileNames||[]).join(", ");
-    showModalCb({title:"提出完了！",sub:names,big:"✅"},()=>{
+    showModalCb({title:"提出しました",sub:"管理者の受領待ちです"+(names?`：${names}`:""),big:"✅"},()=>{
       if(data.session.adminAuthed) renderAdminTaskList(); else renderStaffTaskList()});
   }
 });
@@ -2169,7 +2198,7 @@ function normalizeLatestTaskWorkbookStatus(value) {
   if (!raw) return "依頼前";
   if (raw === "依頼済" || raw === "着手中" || raw === "対応中") return "依頼中";
   if (raw === "未依頼") return "依頼前";
-  if (raw === "完了" || raw === "キャンセル" || raw === "依頼中" || raw === "期限超過" || raw === "依頼前") return raw;
+  if (raw === "完了" || raw === "キャンセル" || raw === "依頼中" || raw === "提出中" || raw === "期限超過" || raw === "依頼前") return raw;
   return raw;
 }
 
@@ -5354,6 +5383,184 @@ renderMonthCheck = function() {
   syncPull().then(changed => {
     if (changed && location.hash === "#admin-month-check" && data.session.adminAuthed) renderMonthCheck();
   });
+};
+
+ensureTaskImportControls = function() {
+  const addBtn = $("atlAddTask");
+  if (!addBtn || !addBtn.parentNode) return;
+  ["atlDownloadTemplate", "atlImportExcel", "atlImportFile"].forEach(id => {
+    const node = document.getElementById(id);
+    if (node) node.remove();
+  });
+  if (!document.getElementById("atlImportLatestWorkbook")) {
+    const latestBtn = document.createElement("button");
+    latestBtn.id = "atlImportLatestWorkbook";
+    latestBtn.className = "btn success small";
+    latestBtn.textContent = "最新版業務表取込";
+    latestBtn.addEventListener("click", () => {
+      const input = document.getElementById("atlImportLatestWorkbookFile");
+      if (input) {
+        input.value = "";
+        input.click();
+      }
+    });
+    addBtn.parentNode.insertBefore(latestBtn, addBtn);
+  }
+  if (!document.getElementById("atlImportLatestWorkbookFile")) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.id = "atlImportLatestWorkbookFile";
+    input.accept = ".xlsx";
+    input.style.display = "none";
+    input.addEventListener("change", event => {
+      const file = event.target && event.target.files && event.target.files[0];
+      importLatestTaskWorkbookFromFile(file).catch(error => handleDirectActionError(error, "最新版業務表取込に失敗しました"));
+    });
+    addBtn.parentNode.appendChild(input);
+  }
+};
+
+function getPreviousMonthDate(baseDate) {
+  const d = baseDate || new Date();
+  return new Date(d.getFullYear(), d.getMonth() - 1, 1);
+}
+
+function getMonthCheckUserTasks(y, m, user) {
+  const key = getMonthCheckLockKey(y, m);
+  return (data.tasks || []).filter(task => {
+    if (!task || task.workType !== "在宅") return false;
+    if (!taskBelongsToMonthCheckUser(task, user)) return false;
+    return getMonthCheckMonthKeyFromDate(task.deadline || task.requestDate || task.completionDate) === key;
+  });
+}
+
+function taskBelongsToMonthCheckUser(task, user) {
+  if (!user) return false;
+  const userId = getTaskStaffUserId(task);
+  if (String(userId || "") === String(user.id || "")) return true;
+  return taskMatchesStaffRef(task, user.id) || taskMatchesStaffRef(task, getUserDisplayName(user));
+}
+
+getMonthCheckSummaryRows = function(y, m) {
+  return getMonthCheckUserOptions().map((user, index) => {
+    const reports = filterReports(user.reports, String(y), String(m), "出勤");
+    const attendanceSalary = reports.reduce((sum, report) => sum + Math.round(calcReportSalary(report, user.id)), 0);
+    const transport = reports.reduce((sum, report) => sum + (parseInt(report.transport, 10) || 0), 0);
+    const incentiveCount = reports.reduce((sum, report) => sum + (parseInt(report.proofCount, 10) || 0), 0);
+    const workDays = new Set(reports.map(report => report.date)).size;
+    const tasks = getMonthCheckUserTasks(y, m, user);
+    const hasOverdue = tasks.some(task => normalizeMonthCheckTaskStatus(task.status) === "期限超過");
+    const remoteSalary = tasks
+      .filter(task => normalizeMonthCheckTaskStatus(task.status) === "完了")
+      .reduce((sum, task) => sum + ((getTaskPrice(task.taskType || "") || 0) * (Number(task.manHours) || 0)) + ((parseInt(task.validPointCount, 10) || 0) * 500), 0);
+    return {
+      index: index + 1,
+      user,
+      result: { status: hasOverdue ? "期限超過あり" : "期限超過なし", details: [] },
+      hasStampReq: !!(user.pendingStampRequest && user.pendingStampRequest.status === "pending"),
+      workDays,
+      incentiveCount,
+      salary: attendanceSalary + remoteSalary,
+      transport
+    };
+  });
+};
+
+getMonthCheckStatusColor = function(status) {
+  if (status === "期限超過なし") return "var(--mint)";
+  if (status === "期限超過あり") return "var(--red)";
+  return "var(--muted)";
+};
+
+getMonthCheckTaskRows = function(y, m, staffId, status, matchStatus) {
+  const rows = [];
+  getMonthCheckUserOptions().forEach(user => {
+    if (staffId && staffId !== "全て" && String(user.id || "") !== String(staffId)) return;
+    getMonthCheckUserTasks(y, m, user).forEach(task => {
+      const normalizedStatus = normalizeMonthCheckTaskStatus(task.status);
+      const state = normalizedStatus === "期限超過" ? "期限超過あり" : "期限超過なし";
+      rows.push({
+        userId: user.id || "",
+        userName: getUserDisplayName(user),
+        taskStatus: task.status || "",
+        matchStatus: state,
+        completionDate: task.completionDate || "",
+        taskType: task.taskType || "不明",
+        manHours: Number(task.manHours) || 0,
+        validPointCount: task.validPointCount || 0
+      });
+    });
+  });
+  return rows
+    .filter(row => !status || status === "全て" || normalizeMonthCheckTaskStatus(row.taskStatus) === String(status))
+    .filter(row => !matchStatus || matchStatus === "全て" || row.matchStatus === String(matchStatus))
+    .sort((a, b) => a.userName.localeCompare(b.userName, "ja") || a.taskStatus.localeCompare(b.taskStatus, "ja") || a.taskType.localeCompare(b.taskType, "ja"));
+};
+
+const _specRenderMonthCheckExtraPanel = renderMonthCheckExtraPanel;
+renderMonthCheckExtraPanel = function(y, m, summaryRows) {
+  _specRenderMonthCheckExtraPanel(y, m, summaryRows);
+  const guide = $("mcConfirmArea");
+  if (guide) {
+    const subs = Array.from(guide.querySelectorAll(".sub"));
+    subs.forEach(text => {
+      if (/一致/.test(text.textContent || "")) {
+        const okCount = summaryRows.filter(row => row.result.status === "期限超過なし").length;
+        text.textContent = `${okCount}/${summaryRows.length} 件が期限超過なし`;
+      }
+    });
+  }
+  const matchSelect = document.getElementById("mcTaskMatchStatus");
+  const statusSelect = document.getElementById("mcTaskStatus");
+  if (statusSelect && !Array.from(statusSelect.options).some(option => option.value === "提出中")) {
+    const option = document.createElement("option");
+    option.value = "提出中";
+    option.textContent = "提出中";
+    statusSelect.insertBefore(option, statusSelect.querySelector("option[value='期限超過']"));
+    statusSelect.value = monthCheckViewState.taskStatus;
+  }
+  if (matchSelect) {
+    matchSelect.innerHTML = `<option value="全て">全て</option><option value="期限超過なし">期限超過なし</option><option value="期限超過あり">期限超過あり</option>`;
+    matchSelect.value = monthCheckViewState.taskMatchStatus;
+    matchSelect.onchange = () => {
+      monthCheckViewState.taskMatchStatus = matchSelect.value;
+      renderMonthCheck();
+    };
+  }
+};
+
+toggleMonthLock = function(y, m) {
+  const key = getMonthCheckLockKey(y, m);
+  const locked = !!(data.lockedMonths && data.lockedMonths[key]);
+  if (locked) {
+    if (!confirm(`${y}年${m}月の確定を取り消しますか？`)) return;
+    delete data.lockedMonths[key];
+    saveData(data);
+    renderMonthCheck();
+    return;
+  }
+  const rows = getMonthCheckSummaryRows(y, m);
+  if (rows.some(row => row.result.status === "期限超過あり")) {
+    showModal({ title: "期限超過があります", sub: "期限超過なしにしてから確定してください", big: "NG" });
+    return;
+  }
+  if (!confirm(`${y}年${m}月を確定しますか？`)) return;
+  data.lockedMonths = data.lockedMonths || {};
+  data.lockedMonths[key] = true;
+  saveData(data);
+  renderMonthCheck();
+};
+
+const _specRenderMonthCheck = renderMonthCheck;
+renderMonthCheck = function() {
+  const wasReset = monthCheckShouldReset;
+  _specRenderMonthCheck();
+  if (wasReset) {
+    const prev = getPreviousMonthDate(new Date());
+    $("mcYear").value = String(prev.getFullYear());
+    $("mcMonth").value = String(prev.getMonth() + 1);
+    _specRenderMonthCheck();
+  }
 };
 
 route();

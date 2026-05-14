@@ -1,5 +1,5 @@
 /* === VIEWS (staff-specific) === */
-const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHome"),reportInput:$("reportInput"),reportConfirm:$("reportConfirm"),staffTaskList:$("staffTaskList"),adminAuth:_noop,adminReportMgmt:_noop,adminReportDetail:_noop,adminTaskList:_noop,adminDropdownEdit:_noop,adminHome:_noop,adminEdit:_noop,adminMonthCheck:_noop};
+const views={userAuth:$("userAuth"),userStamp:$("userStamp"),userHome:$("userHome"),reportInput:$("reportInput"),reportConfirm:$("reportConfirm"),salaryConfirm:$("salaryConfirm"),staffTaskList:$("staffTaskList"),adminAuth:_noop,adminReportMgmt:_noop,adminReportDetail:_noop,adminTaskList:_noop,adminDropdownEdit:_noop,adminHome:_noop,adminEdit:_noop,adminMonthCheck:_noop};
 
 /* === MODAL/ESCAPE SETUP === */
 $("mClose").addEventListener("click",hideModal);$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))hideModal()});
@@ -11,10 +11,11 @@ function showOnly(v){Object.values(views).forEach(x=>x.classList.add("hidden"));
 function route(){checkOverdue();const h=location.hash||"#user-login";
 if(h==="#admin-login"||h==="#admin"||h==="#admin-edit"||h==="#admin-report-mgmt"||h==="#admin-report-detail"||h==="#admin-task-list"||h==="#admin-dropdown-edit"||h==="#admin-month-check"){window.location.href="admin.html"+h;return}
 if(h==="#user-login"){showOnly("userAuth");$("userAuthErr").style.display="none";return}
-if(h==="#user-stamp"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userStamp");renderStampScreen();return}
+if(h==="#user-stamp"){location.hash="#user";return}
 if(h==="#user"){if(!data.session.userId){location.hash="#user-login";return}const u=data.users[data.session.userId];if(u&&u.userType==="社会人"){location.hash="#report-confirm";return}showOnly("userHome");renderUserHome();syncPull().then(changed=>{if(changed && location.hash==="#user" && data.session.userId) renderUserHome()});return}
 if(h==="#report-input"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportInput");initReportForm();return}
 if(h==="#report-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("reportConfirm");renderReportConfirm();return}
+if(h==="#salary-confirm"){if(!data.session.userId){location.hash="#user-login";return}showOnly("salaryConfirm");renderSalaryConfirm();return}
 if(h==="#staff-task-list"){if(!data.session.userId){location.hash="#user-login";return}showOnly("staffTaskList");renderStaffTaskList();return}
 location.hash="#user-login"}
 window.addEventListener("hashchange",route);
@@ -732,18 +733,18 @@ function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
 function completeTaskFromAdmin(t){
   if(!t)return;
   if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は編集できません`,big:"NG"});return}
-  if(!confirm("この業務を完了にしますか？"))return;
+  if(!confirm("この提出を受領して完了にしますか？"))return;
   t.status="完了";
   t.completionDate=t.completionDate||ymd(new Date());
   saveData(data);
   renderAdminTaskList();
-  showModal({title:"完了にしました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
+  showModal({title:"受領しました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
 }
 function appendAdminCompleteButton(container,t){
-  if(!container||!t||t.status==="完了"||t.status==="キャンセル")return;
+  if(!container||!t||t.status!=="提出中")return;
   const completeBtn=document.createElement("button");
   completeBtn.className="btn success small";
-  completeBtn.textContent="✅ 完了";
+  completeBtn.textContent="受領";
   completeBtn.addEventListener("click",()=>completeTaskFromAdmin(t));
   container.appendChild(completeBtn);
 }
@@ -816,6 +817,25 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         attBtn.addEventListener("click",()=>openFileUpload(t,"admin-attach"));wrap.appendChild(attBtn);
         appendAdminCompleteButton(wrap,t);
         tdSub.appendChild(wrap);
+      } else if(t.status==="提出中"){
+        const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
+        if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
+          const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
+          dlBtn.addEventListener("click",()=>{
+            if(t.fileIds && t.fileIds.length){
+              for(let i=0;i<t.fileIds.length;i++){
+                downloadDriveFile(t.fileIds[i], (t.fileNames && t.fileNames[i]) || "download");
+              }
+            }else if(t.fileNames && t.fileNames.length){
+              downloadTaskFiles(t);
+            }
+          });
+          wrap.appendChild(dlBtn);
+        }
+        const attBtn=document.createElement("button");attBtn.className="btn ghost small";attBtn.textContent="📎添付";
+        attBtn.addEventListener("click",()=>openFileUpload(t,"admin-attach"));wrap.appendChild(attBtn);
+        appendAdminCompleteButton(wrap,t);
+        tdSub.appendChild(wrap);
       } else if(t.status==="完了"){
         // 完了: DL + 依頼中に戻す
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -849,6 +869,16 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         // Submit button
         const btn=document.createElement("button");btn.className="btn success small";btn.textContent="📎提出";
         btn.addEventListener("click",()=>openFileUpload(t,"staff"));wrap.appendChild(btn);
+        tdSub.appendChild(wrap);
+      } else if(t.status==="提出中"){
+        const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
+        const span=document.createElement("span");span.style.fontSize="10px";span.style.color="var(--purple)";
+        const fnames=(t.fileNames&&t.fileNames.length)?t.fileNames.join(", "):"提出中";
+        span.textContent="提出中: "+fnames;wrap.appendChild(span);
+        if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
+          const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
+          dlBtn.addEventListener("click",()=>downloadTaskFiles(t));wrap.appendChild(dlBtn);
+        }
         tdSub.appendChild(wrap);
       } else if(t.status==="完了"){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -937,12 +967,12 @@ function renderFileList(){
 function openFileUpload(task,mode){fileUploadMode=mode||"staff";fileUploadTask=task;pendingFiles=[];renderFileList();
 $("fileOverlay").style.display="flex";$("fileInput").value="";
 const fileTitle=document.querySelector("#fileOverlay h3");const fileSub=document.querySelector("#fileOverlay .sub");
-if(fileTitle)fileTitle.textContent=fileUploadMode==="staff"?"📎 完了ファイル提出":"📎 業務ファイル共有";
-if(fileSub)fileSub.textContent=fileUploadMode==="staff"?"PDF・Excel・スライドなどを担当スタッフの完了済フォルダへ保存します":"PDF・Excel・スライドなどを担当スタッフのフォルダへ保存します";
+if(fileTitle)fileTitle.textContent=fileUploadMode==="staff"?"📎 提出ファイル添付":"📎 業務ファイル共有";
+if(fileSub)fileSub.textContent=fileUploadMode==="staff"?"PDF・Excel・スライドなどを添付して管理者へ提出します":"PDF・Excel・スライドなどを担当スタッフのフォルダへ保存します";
 // Adjust button labels based on mode
 if(fileUploadMode==="admin-attach"){$("fileSubmitBtn").textContent="ファイル添付 ✅";$("fileSubmitDirectBtn").textContent="添付せず閉じる"}
 else if(fileUploadMode==="admin-irai"){$("fileSubmitBtn").textContent="依頼中に変更 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで依頼中に変更"}
-else{$("fileSubmitBtn").textContent="完了 ✅";$("fileSubmitDirectBtn").textContent="提出（ファイルなしでも完了）"}}
+else{$("fileSubmitBtn").textContent="提出 ✅";$("fileSubmitDirectBtn").textContent="ファイルなしで提出"}}
 $("fileOverlayClose").addEventListener("click",()=>{$("fileOverlay").style.display="none"});
 const dz=$("dropZone");
 dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over")});
@@ -974,9 +1004,9 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
     const names=(fileUploadTask.fileNames||[]).join(", ");fileUploadTask=null;
     showModalCb({title:"依頼中に変更しました",sub:names||"ファイルなし",big:"📨"},()=>renderAdminTaskList());
   } else {
-    fileUploadTask.status="完了";fileUploadTask.completionDate=ymd(new Date());saveData(data);$("fileOverlay").style.display="none";
+    fileUploadTask.status="提出中";fileUploadTask.completionDate="";saveData(data);$("fileOverlay").style.display="none";
     const names=(fileUploadTask.fileNames||[]).join(", ");fileUploadTask=null;
-    showModalCb({title:"提出完了！",sub:names,big:"✅"},()=>{
+    showModalCb({title:"提出しました",sub:"管理者の受領待ちです"+(names?`：${names}`:""),big:"✅"},()=>{
       if(data.session.adminAuthed)renderAdminTaskList();else renderStaffTaskList()});
   }});
 
@@ -1001,11 +1031,11 @@ $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
     baseTask.status="依頼中";saveData(data);$("fileOverlay").style.display="none";fileUploadTask=null;
     showModalCb({title:"依頼中に変更しました",sub:"ファイルなし",big:"📨"},()=>renderAdminTaskList());
   } else {
-    baseTask.status="完了";baseTask.completionDate=ymd(new Date());
+    baseTask.status="提出中";baseTask.completionDate="";
     if(!baseTask.fileNames||baseTask.fileNames.length===0) baseTask.fileNames=["（ファイルなし）"];
     saveData(data);$("fileOverlay").style.display="none";fileUploadTask=null;
     const names=(baseTask.fileNames||[]).join(", ");
-    showModalCb({title:"提出完了！",sub:names,big:"✅"},()=>{
+    showModalCb({title:"提出しました",sub:"管理者の受領待ちです"+(names?`：${names}`:""),big:"✅"},()=>{
       if(data.session.adminAuthed) renderAdminTaskList(); else renderStaffTaskList()});
   }
 });
@@ -2576,4 +2606,233 @@ filterTasks = function(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs
     return true;
   });
 };
+
+function ensureStaffTopbarPasswordButtons() {
+  ["userHome", "reportInput", "reportConfirm", "salaryConfirm", "staffTaskList"].forEach(sectionId => {
+    const section = document.getElementById(sectionId);
+    const actions = section && section.querySelector(".topbar .actions");
+    if (!actions || actions.querySelector("[data-staff-top-password='1']")) return;
+    const btn = document.createElement("button");
+    btn.className = "btn ghost";
+    btn.type = "button";
+    btn.dataset.staffTopPassword = "1";
+    btn.textContent = "PW変更";
+    btn.addEventListener("click", () => openStaffPasswordChangeFlow());
+    const logout = Array.from(actions.querySelectorAll("button")).find(node => /ログアウト/.test(node.textContent || ""));
+    actions.insertBefore(btn, logout || actions.firstChild);
+  });
+}
+
+renderStaffNavigationDashboard = function(targetId, user, options) {
+  const mount = document.getElementById(targetId);
+  if (!mount || !user) return;
+  ensureStaffTopbarPasswordButtons();
+  const taskStats = getStaffOpenTaskStats(user.id);
+  const reportCount = getCurrentMonthReportCount(user);
+  const stampedToday = !!(user.stamps && user.stamps[ymd(new Date())]);
+  const requestState = user.pendingStampRequest ? user.pendingStampRequest.status : "";
+  const requestText = requestState === "pending" ? "申請中" : "申請なし";
+  const current = options.current || "";
+  const actions = [
+    { key: "report-input", label: "日報入力" },
+    { key: "report-list", label: "日報一覧" },
+    { key: "task-list", label: "業務一覧" },
+    { key: "salary", label: "給与確認" }
+  ];
+  mount.innerHTML = `
+    <div class="dash-head">
+      <div>
+        <div class="dash-title">${options.title || "クイックメニュー"}</div>
+        <div class="dash-sub">${options.subtitle || "主要画面へすぐ移動できます"}</div>
+      </div>
+      <div class="dash-chip">${stampedToday ? "本日スタンプ済み" : "本日スタンプ未実施"}</div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card"><div class="dash-label">今月の日報</div><div class="dash-value">${reportCount}</div><div class="dash-note">今月に入力した件数</div></div>
+      <div class="dash-card"><div class="dash-label">進行中タスク</div><div class="dash-value">${taskStats.open}</div><div class="dash-note">期限超過 ${taskStats.overdue} 件</div></div>
+      <div class="dash-card"><div class="dash-label">スタンプ修正申請</div><div class="dash-value small">${requestText}</div><div class="dash-note">申請中のみここに表示します</div></div>
+    </div>
+    <div class="dash-actions">
+      ${actions.map(action => `<button type="button" class="dash-action${action.key === current ? " primary" : ""}" data-staff-nav="${action.key}">${action.label}<span>${action.key === current ? "•" : ">"}</span></button>`).join("")}
+    </div>
+  `;
+  mount.querySelectorAll("[data-staff-nav]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-staff-nav");
+      if (action === "report-input") {
+        editingReportIdx = -1;
+        rpTransportLocked = false;
+        location.hash = "#report-input";
+      } else if (action === "report-list") location.hash = "#report-confirm";
+      else if (action === "task-list") location.hash = "#staff-task-list";
+      else if (action === "salary") location.hash = "#salary-confirm";
+    });
+  });
+};
+
+function renderIntegratedStampPanel(user) {
+  const panel = $("stampDoneBanner");
+  if (!panel || !user || user.userType === "社会人") return;
+  const total = countTotal(user);
+  const stampedToday = !!(user.stamps && user.stamps[ymd(new Date())]);
+  panel.classList.remove("hidden");
+  panel.classList.add("stamp-integrated-panel");
+  panel.innerHTML = `
+    <div class="stamp-integrated-copy">
+      <div class="sdb-emoji">${stampedToday ? "✅" : "👆"}</div>
+      <div class="sdb-text">${stampedToday ? "今日のスタンプ完了！" : "今日のスタンプ"}</div>
+      <div class="sdb-sub">${stampedToday ? "おつかれさまです！" : "合言葉を入力して出勤を記録します"}</div>
+      <div id="homeStampRank"></div>
+    </div>
+    <button class="big-stamp-btn ${stampedToday ? "done" : ""}" type="button" id="homeStampBtn" ${stampedToday ? "disabled" : ""}><span class="emoji">${stampedToday ? "✅" : "👆"}</span><span class="label">${stampedToday ? "スタンプ済み" : "出勤スタンプ"}</span></button>
+    <div class="rank-info" id="homeStampProgress"></div>
+  `;
+  renderRankBadge($("homeStampRank"), total);
+  renderProgress($("homeStampProgress"), total);
+  const btn = $("homeStampBtn");
+  if (btn && !stampedToday) {
+    btn.addEventListener("click", () => {
+      handleStaffStampDirect().catch(error => handleDirectActionError(error, "スタンプ保存に失敗しました"));
+    });
+  }
+}
+
+const _specRenderUserHome = renderUserHome;
+renderUserHome = function() {
+  _specRenderUserHome();
+  const u = data.users[data.session.userId];
+  if (!u) return;
+  renderIntegratedStampPanel(u);
+  ensureStaffTopbarPasswordButtons();
+};
+
+const _specRenderReportConfirm = renderReportConfirm;
+renderReportConfirm = function() {
+  _specRenderReportConfirm();
+  ensureStaffTopbarPasswordButtons();
+};
+
+const _specRenderStaffTaskList = renderStaffTaskList;
+renderStaffTaskList = function() {
+  _specRenderStaffTaskList();
+  ensureStaffTopbarPasswordButtons();
+};
+
+const _specDoRenderReportList = doRenderReportList;
+doRenderReportList = function() {
+  _specDoRenderReportList();
+  const summary = $("rcSummaryBar");
+  if (summary) summary.innerHTML = "";
+};
+
+function getSalaryMonthKey(y, m) {
+  return `${y}-${pad2(parseInt(m, 10) || 1)}`;
+}
+
+function taskBelongsToCurrentStaff(task, user) {
+  return String(getTaskStaffUserId(task) || "") === String(user && user.id || "");
+}
+
+function calcRemoteTaskBasePay(task) {
+  const hours = Number(task.manHours) || 0;
+  const price = getTaskPrice(task.taskType || "") || 0;
+  return price * hours;
+}
+
+function calcTaskIncentive(task) {
+  return (parseInt(task.validPointCount, 10) || 0) * 500;
+}
+
+function buildSalarySelects(user) {
+  const ySel = $("salaryYear");
+  const mSel = $("salaryMonth");
+  if (!ySel || !mSel || ySel.dataset.ready === "1") return;
+  const now = new Date();
+  const years = new Set([now.getFullYear()]);
+  (user.reports || []).forEach(report => {
+    if (report.date) years.add(new Date(report.date + "T00:00:00").getFullYear());
+  });
+  (data.tasks || []).forEach(task => {
+    if (task.completionDate) years.add(new Date(task.completionDate + "T00:00:00").getFullYear());
+  });
+  ySel.innerHTML = "";
+  Array.from(years).sort((a, b) => a - b).forEach(year => {
+    const option = document.createElement("option");
+    option.value = String(year);
+    option.textContent = `${year}年`;
+    ySel.appendChild(option);
+  });
+  mSel.innerHTML = "";
+  for (let m = 1; m <= 12; m += 1) {
+    const option = document.createElement("option");
+    option.value = String(m);
+    option.textContent = `${m}月`;
+    mSel.appendChild(option);
+  }
+  ySel.value = String(now.getFullYear());
+  mSel.value = String(now.getMonth() + 1);
+  ySel.addEventListener("change", renderSalaryConfirm);
+  mSel.addEventListener("change", renderSalaryConfirm);
+  ySel.dataset.ready = "1";
+}
+
+function renderSalaryConfirm() {
+  const user = data.users[data.session.userId];
+  if (!user) return;
+  $("salaryUserName").textContent = user.name || user.id;
+  ensureStaffTopbarPasswordButtons();
+  buildSalarySelects(user);
+  const y = $("salaryYear").value;
+  const m = $("salaryMonth").value;
+  const monthKey = getSalaryMonthKey(y, m);
+  const attendanceReports = filterReports(user.reports || [], y, m, "出勤");
+  const attendanceMinutes = attendanceReports.reduce((sum, report) => sum + calcWorkMinutes(report), 0);
+  const attendanceSalary = attendanceReports.reduce((sum, report) => sum + Math.round(calcReportSalary(report, user.id)), 0);
+  const attendanceIncentive = attendanceReports.reduce((sum, report) => sum + (user.userType === "社会人" ? (parseInt(report.incentiveAmount, 10) || 0) : ((parseInt(report.proofCount, 10) || 0) * 500)), 0);
+  const attendanceTransport = attendanceReports.reduce((sum, report) => sum + (parseInt(report.transport, 10) || 0), 0);
+  const remoteTasks = (data.tasks || []).filter(task =>
+    task && task.workType === "在宅" &&
+    task.status === "完了" &&
+    taskBelongsToCurrentStaff(task, user) &&
+    getMonthCheckKeyFromDateForSalary(task.completionDate) === monthKey
+  );
+  const remoteBase = remoteTasks.reduce((sum, task) => sum + calcRemoteTaskBasePay(task), 0);
+  const remoteIncentive = remoteTasks.reduce((sum, task) => sum + calcTaskIncentive(task), 0);
+  const remoteRows = remoteTasks.map(task => {
+    const hours = Number(task.manHours) || 0;
+    const price = getTaskPrice(task.taskType || "") || 0;
+    return `<tr><td>${escapeHtml(task.taskType || "")}</td><td>${hours}</td><td>${(price * hours).toLocaleString()}円</td><td>${parseInt(task.validPointCount, 10) || 0}</td></tr>`;
+  }).join("");
+  const h = Math.floor(attendanceMinutes / 60);
+  const mm = attendanceMinutes % 60;
+  $("salarySummary").innerHTML = `
+    <div class="salary-grid">
+      <div class="salary-box">
+        <div class="salary-title">出勤</div>
+        <div class="summary-bar">
+          <div class="summary-chip"><div><div class="sk">勤務時間（参考）</div><div class="sv">${h}h${mm ? mm + "m" : ""}</div></div></div>
+          <div class="summary-chip"><div><div class="sk">給与合計</div><div class="sv">${attendanceSalary.toLocaleString()}円</div></div></div>
+          <div class="summary-chip"><div><div class="sk">インセンティブ</div><div class="sv">${attendanceIncentive.toLocaleString()}円</div></div></div>
+          <div class="summary-chip"><div><div class="sk">交通費</div><div class="sv">${attendanceTransport.toLocaleString()}円</div></div></div>
+        </div>
+      </div>
+      <div class="salary-box">
+        <div class="salary-title">在宅</div>
+        <div class="summary-bar">
+          <div class="summary-chip"><div><div class="sk">インセンティブ</div><div class="sv">${remoteIncentive.toLocaleString()}円</div></div></div>
+          <div class="summary-chip"><div><div class="sk">給与</div><div class="sv">${(remoteBase + remoteIncentive).toLocaleString()}円</div></div></div>
+        </div>
+        <div class="tableWrap"><table><thead><tr><th>業務種類</th><th>工数</th><th>料金</th><th>インセンティブ回数</th></tr></thead><tbody>${remoteRows || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">受領済み業務なし</td></tr>`}</tbody></table></div>
+      </div>
+    </div>
+  `;
+}
+
+function getMonthCheckKeyFromDateForSalary(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}` : "";
+}
+
+if ($("salaryBackToReport")) $("salaryBackToReport").addEventListener("click", () => location.hash = "#report-confirm");
+if ($("salaryLogout")) $("salaryLogout").addEventListener("click", doLogout);
 route();

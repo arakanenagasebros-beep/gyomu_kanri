@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';">
+  <meta name="referrer" content="no-referrer">
   <title>業務管理アプリ - スタッフ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700;900&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./common.css?v=6">
+  <link rel="stylesheet" href="./common.css?v=7">
   <link rel="stylesheet" href="./staff.css?v=2">
 </head>
 <body>
@@ -113,6 +115,17 @@
     </div></div>
 </section>
 
+<!-- ======= 給与確認 ======= -->
+<section id="salaryConfirm" class="hidden">
+  <div class="topbar"><div class="brand"><div class="logo" style="background:var(--grad3);transform:rotate(0);">💰</div><div class="t"><h1>給与確認</h1><p><span id="salaryUserName">---</span> さん</p></div></div>
+    <div class="actions"><button class="btn ghost" type="button" id="salaryBackToReport">📋 日報一覧</button><button class="btn" type="button" id="salaryLogout">ログアウト</button></div></div>
+  <div class="card"><div class="hd"><div><p class="title">💰 給与確認</p><p class="sub">出勤は日報、在宅は管理側の受領済み業務を基準に集計します</p></div></div>
+    <div class="bd">
+      <div class="filter-bar"><div class="fg"><label>年</label><select id="salaryYear"></select></div><div class="fg"><label>月</label><select id="salaryMonth"></select></div></div>
+      <div id="salarySummary"></div>
+    </div></div>
+</section>
+
 <!-- ======= スタッフ側：業務一覧 ======= -->
 <section id="staffTaskList" class="hidden">
   <div class="topbar"><div class="brand"><div class="logo" style="background:var(--grad3);transform:rotate(0);">📑</div><div class="t"><h1>業務一覧</h1><p><span id="stlUserName">---</span> さん</p></div></div>
@@ -130,7 +143,7 @@
         <div class="fg"><label>年</label><select id="stlYear"></select></div>
         <div class="fg"><label>月</label><select id="stlMonth"></select></div>
         <div class="fg"><label>担当ｽﾀｯﾌ</label><select id="stlStaff"></select></div>
-        <div class="fg"><label>状況</label><select id="stlStatus"><option value="全て">全て</option><option value="依頼前">依頼前</option><option value="依頼中">依頼中</option><option value="期限超過">期限超過</option><option value="完了">完了</option><option value="キャンセル">キャンセル</option></select></div>
+        <div class="fg"><label>状況</label><select id="stlStatus"><option value="全て">全て</option><option value="依頼前">依頼前</option><option value="依頼中">依頼中</option><option value="提出中">提出中</option><option value="期限超過">期限超過</option><option value="完了">完了</option><option value="キャンセル">キャンセル</option></select></div>
       </div>
       <div class="tableWrap"><table><thead id="stlThead"></thead><tbody id="stlTbody"></tbody></table></div>
     </div></div>
@@ -153,8 +166,8 @@
       <div class="drop-zone" id="dropZone"><div class="dz-icon">📂</div><div class="dz-text">ファイルをドラッグ＆ドロップ</div><div class="dz-file" id="dzFileName"></div>
         <input type="file" id="fileInput" multiple style="display:none;"></div>
       <div class="file-list" id="fileList"></div>
-      <button class="btn success" id="fileSubmitBtn" style="width:100%;margin-top:12px;" disabled>完了 ✅</button>
-      <button class="btn primary" id="fileSubmitDirectBtn" type="button" style="width:100%;margin-top:10px;">提出（ファイルなしでも完了）</button>
+      <button class="btn success" id="fileSubmitBtn" style="width:100%;margin-top:12px;" disabled>提出 ✅</button>
+      <button class="btn primary" id="fileSubmitDirectBtn" type="button" style="width:100%;margin-top:10px;">ファイルなしで提出</button>
     </div>
   </div>
 </div>
@@ -163,7 +176,7 @@
   <div class="modal" style="max-width:600px;">
     <div class="mh"><div><h3 id="taskAddTitle">📑 新規業務追加</h3></div><button class="btn small" id="taskAddClose">閉じる</button></div>
     <div class="mb" style="max-height:70vh;overflow-y:auto;">
-      <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>業務形態</label><select id="taWorkType"><option value="出勤">出勤</option><option value="在宅">在宅</option></select></div><div class="form-group"><label>状況</label><select id="taStatus"><option>依頼前</option><option>依頼中</option><option>期限超過</option><option>完了</option><option>キャンセル</option></select></div></div>
+      <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>業務形態</label><select id="taWorkType"><option value="出勤">出勤</option><option value="在宅">在宅</option></select></div><div class="form-group"><label>状況</label><select id="taStatus"><option>依頼前</option><option>依頼中</option><option>提出中</option><option>期限超過</option><option>完了</option><option>キャンセル</option></select></div></div>
       <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>依頼日</label><input type="date" id="taRequestDate"></div><div class="form-group"><label>期限日</label><input type="date" id="taDeadline"></div></div>
       <div class="row" style="margin-bottom:10px;"><div class="form-group"><label>完了日</label><input type="date" id="taCompletionDate"></div><div class="form-group"><label>工数</label><input type="number" id="taManHours" min="0" value="1"></div></div>
       <div class="form-group"><label>テキストコード</label><div id="taTextCodesArea"></div></div>
@@ -221,7 +234,7 @@
 </div>
 
 <script src="./config.js?v=5"></script>
-<script src="./common.js?v=5"></script>
-<script src="./staff.js?v=5"></script>
+<script src="./common.js?v=6"></script>
+<script src="./staff.js?v=6"></script>
 </body>
 </html>
