@@ -791,18 +791,20 @@ function filterTasks(dateType,y,m,staff,employee,status,subTabStaff,hideStaffs){
 function completeTaskFromAdmin(t){
   if(!t)return;
   if(isLockedMonth(t.requestDate)){showModal({title:"確定済みの月です",sub:`${getMonthLockKey(t.requestDate)} は編集できません`,big:"NG"});return}
-  if(!confirm("この提出を受領して完了にしますか？"))return;
+  const isSubmitted=t.status==="提出中";
+  const confirmText=isSubmitted?"この提出を受領して完了にしますか？":"この業務を完了に変更しますか？";
+  if(!confirm(confirmText))return;
   t.status="完了";
   t.completionDate=t.completionDate||ymd(new Date());
   saveData(data);
   renderAdminTaskList();
-  showModal({title:"受領しました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
+  showModal({title:isSubmitted?"受領しました":"完了に変更しました",sub:"業務一覧の状況を完了に更新しました。",big:"✅"});
 }
 function appendAdminCompleteButton(container,t){
-  if(!container||!t||t.status!=="提出中")return;
+  if(!container||!t||!["依頼中","期限超過","提出中"].includes(t.status))return;
   const completeBtn=document.createElement("button");
   completeBtn.className="btn success small";
-  completeBtn.textContent="受領";
+  completeBtn.textContent=t.status==="提出中"?"受領":"完了に変更";
   completeBtn.addEventListener("click",()=>completeTaskFromAdmin(t));
   container.appendChild(completeBtn);
 }
