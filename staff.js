@@ -2634,6 +2634,7 @@ renderStaffNavigationDashboard = function(targetId, user, options) {
   const requestText = requestState === "pending" ? "申請中" : "申請なし";
   const current = options.current || "";
   const actions = [
+    { key: "calendar", label: "カレンダー" },
     { key: "report-input", label: "日報入力" },
     { key: "report-list", label: "日報一覧" },
     { key: "task-list", label: "業務一覧" },
@@ -2663,7 +2664,8 @@ renderStaffNavigationDashboard = function(targetId, user, options) {
         editingReportIdx = -1;
         rpTransportLocked = false;
         location.hash = "#report-input";
-      } else if (action === "report-list") location.hash = "#report-confirm";
+      } else if (action === "calendar") location.hash = "#user";
+      else if (action === "report-list") location.hash = "#report-confirm";
       else if (action === "task-list") location.hash = "#staff-task-list";
       else if (action === "salary") location.hash = "#salary-confirm";
     });
@@ -2781,6 +2783,7 @@ function renderSalaryConfirm() {
   if (!user) return;
   $("salaryUserName").textContent = user.name || user.id;
   ensureStaffTopbarPasswordButtons();
+  renderStaffSectionDashboard("salaryConfirm", "staffSalaryDashboard", "クイックメニュー", "給与確認から他の画面へ移動できます", "salary");
   buildSalarySelects(user);
   const y = $("salaryYear").value;
   const m = $("salaryMonth").value;
@@ -2798,10 +2801,13 @@ function renderSalaryConfirm() {
   );
   const remoteBase = remoteTasks.reduce((sum, task) => sum + calcRemoteTaskBasePay(task), 0);
   const remoteIncentive = remoteTasks.reduce((sum, task) => sum + calcTaskIncentive(task), 0);
-  const remoteRows = remoteTasks.map(task => {
-    const hours = Number(task.manHours) || 0;
-    const price = getTaskPrice(task.taskType || "") || 0;
-    return `<tr><td>${escapeHtml(task.taskType || "")}</td><td>${hours}</td><td>${(price * hours).toLocaleString()}円</td><td>${parseInt(task.validPointCount, 10) || 0}</td></tr>`;
+  const remoteTypes = Array.from(new Set([...(getTaskTypes() || []), ...remoteTasks.map(task => task.taskType || "").filter(Boolean)]));
+  const remoteRows = remoteTypes.map(taskType => {
+    const tasksByType = remoteTasks.filter(task => (task.taskType || "") === taskType);
+    const hours = tasksByType.reduce((sum, task) => sum + (Number(task.manHours) || 0), 0);
+    const amount = tasksByType.reduce((sum, task) => sum + calcRemoteTaskBasePay(task), 0);
+    const incentiveCount = tasksByType.reduce((sum, task) => sum + (parseInt(task.validPointCount, 10) || 0), 0);
+    return `<tr><td>${escapeHtml(taskType)}</td><td>${hours}</td><td>${amount.toLocaleString()}円</td><td>${incentiveCount}</td></tr>`;
   }).join("");
   const h = Math.floor(attendanceMinutes / 60);
   const mm = attendanceMinutes % 60;
@@ -2822,7 +2828,7 @@ function renderSalaryConfirm() {
           <div class="summary-chip"><div><div class="sk">インセンティブ</div><div class="sv">${remoteIncentive.toLocaleString()}円</div></div></div>
           <div class="summary-chip"><div><div class="sk">給与</div><div class="sv">${(remoteBase + remoteIncentive).toLocaleString()}円</div></div></div>
         </div>
-        <div class="tableWrap"><table><thead><tr><th>業務種類</th><th>工数</th><th>料金</th><th>インセンティブ回数</th></tr></thead><tbody>${remoteRows || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">受領済み業務なし</td></tr>`}</tbody></table></div>
+        <div class="tableWrap"><table><thead><tr><th>業務種類</th><th>工数</th><th>料金</th><th>インセンティブ回数</th></tr></thead><tbody>${remoteRows || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">業務種類が登録されていません</td></tr>`}</tbody></table></div>
       </div>
     </div>
   `;
