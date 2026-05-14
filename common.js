@@ -70,7 +70,8 @@ let _syncVersion = parseInt(localStorage.getItem(SYNC_VERSION_KEY) || "0", 10) |
 let _syncTimer = null;
 let _isSyncing = false;
 let _lastSyncTime = null;
-const POLL_INTERVAL = 30000;
+const POLL_INTERVAL = 60000;
+const POLL_INTERVAL_HIDDEN = 5 * 60000;
 
 function updateSyncUI(status, msg) {
   const dot = document.getElementById("syncDot");
@@ -308,52 +309,6 @@ async function handleQueueVersionConflict() {
   updateSyncUI("loading", "最新状態へ差分を再送中...");
 }
 
-async function processQueue() {
-  if (isSending || actionQueue.length === 0 || !API_URL) return;
-  const req = actionQueue[0];
-  if (req.nextAttemptAt && req.nextAttemptAt > Date.now()) {
-    setTimeout(processQueue, Math.min(req.nextAttemptAt - Date.now(), 1000));
-    return;
-  }
-  isSending = true;
-  updateSyncUI("loading", "保存中...");
-  try {
-    const body = Object.assign({}, req.payload, {
-      _action: req.action,
-      token: getToken(),
-      _baseVersion: _syncVersion
-    });
-    const resp = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(body),
-      redirect: "follow"
-    });
-    const result = await resp.json();
-    if (result.ok) {
-      actionQueue.shift();
-      persistActionQueue();
-      _syncVersion = result.version || _syncVersion + 1;
-      persistSyncVersion();
-      _lastSyncTime = Date.now();
-      updateSyncUI("ok", "同期済み ✓");
-    } else {
-      updateSyncUI("err", result.error || "保存エラー");
-    }
-  } catch (e) {
-    updateSyncUI("err", "通信エラー");
-  }
-  isSending = false;
-  if (needsQueueRebuild) {
-    needsQueueRebuild = false;
-    saveData(data);
-    return;
-  }
-  processQueue();
-}
-
-async function syncPush() { return true; }
-
 function sanitizeRemoteData(remoteData) {
   const clean = JSON.parse(JSON.stringify(remoteData || {}));
   delete clean._version;
@@ -411,12 +366,23 @@ async function syncCheckVersionLegacy() {
   return syncCheckVersion();
 }
 
+function _currentPollInterval() {
+  return (typeof document !== "undefined" && document.hidden) ? POLL_INTERVAL_HIDDEN : POLL_INTERVAL;
+}
 function startSyncPolling() {
   stopSyncPolling();
-  _syncTimer = setInterval(syncCheckVersion, POLL_INTERVAL);
+  _syncTimer = setInterval(syncCheckVersion, _currentPollInterval());
 }
 function stopSyncPolling() {
   if (_syncTimer) { clearInterval(_syncTimer); _syncTimer = null; }
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", function() {
+    if (!_syncTimer) return;
+    stopSyncPolling();
+    _syncTimer = setInterval(syncCheckVersion, _currentPollInterval());
+    if (!document.hidden && getToken()) syncCheckVersion();
+  });
 }
 
 // 強制同期: 重要な画面遷移前に最新データを取得
@@ -578,6 +544,11 @@ async function processQueue() {
     scheduleQueueRetry(req, "通信エラー");
   }
   isSending = false;
+  if (needsQueueRebuild) {
+    needsQueueRebuild = false;
+    saveData(data);
+    return;
+  }
   processQueue();
 }
 
@@ -587,10 +558,16 @@ async function syncPull() {
   if (!idle) return false;
   _isSyncing = true;
   try {
-    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const url = API_URL + "?action=read&token=" + encodeURIComponent(getToken()) + "&_baseVersion=" + encodeURIComponent(_syncVersion || 0);
+    const resp = await fetch(url, { redirect: "follow" });
     const result = await resp.json();
+    if (result.ok && result.unchanged) {
+      _lastSyncTime = Date.now();
+      updateSyncUI("ok", "最新");
+      return false;
+    }
     if (result.ok && result.data) {
-      const remoteVer = result.data._version || 0;
+      const remoteVer = result.data._version || result.version || 0;
       if (remoteVer > _syncVersion) {
         applyRemoteSyncData(result.data);
         updateSyncUI("ok", "同期済み");
@@ -683,6 +660,7 @@ async function forceSyncPull() {
   const wasSyncing = _isSyncing;
   _isSyncing = true;
   try {
+    // 強制取得は _baseVersion を渡さず常にフルデータを取る
     const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
     const result = await resp.json();
     if (result.ok && result.data) {
@@ -782,26 +760,16 @@ function invalidateStaffAccountsCache() {
   _staffAccountsCache = null;
 }
 
+// セキュリティ: 平文PWはサーバーから返さない方針に変更
+// 既存PWの中身は不可視。空欄で送信した場合は upsertStaffUser 側で既存ハッシュを保持する
 async function fetchStaffPasswordForAdmin(userId, forceRefresh = false) {
-  const accounts = await fetchStaffAccountsForAdmin(forceRefresh);
-  const found = accounts.find(acc => String(acc.id || "") === String(userId || ""));
-  return found ? String(found.pw || "") : "";
+  return "";
 }
-
 function fillStaffPasswordField(fieldId, userId, forceRefresh = false) {
   const input = document.getElementById(fieldId);
   if (!input) return;
   input.value = "";
-  if (!userId) return;
-  fetchStaffPasswordForAdmin(userId, forceRefresh)
-    .then(pw => {
-      if (document.getElementById(fieldId) !== input) return;
-      input.value = pw || "";
-    })
-    .catch(() => {
-      if (document.getElementById(fieldId) !== input) return;
-      input.value = "";
-    });
+  input.placeholder = "(変更しない場合は空欄)";
 }
 
 function isUnsupportedDirectActionError(error) {
@@ -1183,38 +1151,6 @@ function normalizeTaskTextCodes(textCodes){
   if(Array.isArray(textCodes))return textCodes.map(v=>String(v||"").trim()).filter(Boolean);
   return String(textCodes||"").split(",").map(v=>v.trim()).filter(Boolean);
 }
-/*
-function applyTaskDraft(task,values){
-  if(!task)task={};
-  values=values||{};
-  task.workType=String(values.workType||task.workType||"蜃ｺ蜍､");
-  task.status=String(values.status||task.status||"萓晞ｼ蜑・);
-  task.requestDate=String(values.requestDate||"");
-  task.deadline=String(values.deadline||"");
-  task.completionDate=String(values.completionDate||"");
-  task.manHours=Math.max(1,parseInt(values.manHours,10)||1);
-  task.textCodes=normalizeTaskTextCodes(values.textCodes);
-  task.taskType=String(values.taskType||"");
-  task.content=String(values.content||"");
-  task.employee=String(values.employee||"");
-  task.notes=String(values.notes||"");
-  if(task.validPointCount==null)task.validPointCount=0;
-  if(!Array.isArray(task.vpEditHistory))task.vpEditHistory=[];
-  if(!Array.isArray(task.fileNames))task.fileNames=[];
-  if(!Array.isArray(task.fileIds))task.fileIds=[];
-  setTaskStaffRef(task,values.staff);
-  return task;
-}
-function createTaskDraft(values){
-  values=values||{};
-  const workType=String(values.workType||"蜃ｺ蜍､");
-  const task={
-    id:values.id!=null?values.id:Date.now(),
-    seqNum:values.seqNum!=null?values.seqNum:nextSeqNum(workType)
-  };
-  return applyTaskDraft(task,Object.assign({},values,{workType:workType}));
-}
-*/
 function applyTaskDraft(task,values){
   if(!task)task={};
   values=values||{};
@@ -1396,3 +1332,4 @@ function renderProgress(el,total){
   const nextInc=calcStampIncentive(nextMile);
   const bonus=nextInc-currentInc;
   el.innerHTML=`<div class="progress-wrap"><div class="progress-label"><span>次のｲﾝｾﾝﾃｨﾌﾞ ${nextMile}pt</span><span>あと <b>${nextMile-total}pt</b>（+${bonus.toLocaleString()}円）</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`}
+

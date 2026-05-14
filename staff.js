@@ -41,7 +41,7 @@ try{
   saveLocalOnly(data);
   userMonthCursor=startOfMonth(new Date());
   _loginBtn.textContent="データ取得中...";
-  await Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 5000))]);
+  Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 1500))]).catch(()=>{});
   if(result.user.userType==="社会人"){location.hash="#report-confirm";}else{
     const today=ymd(new Date());
     const visited=data.users[result.user.id].stampScreenVisitedToday===today;
@@ -552,9 +552,7 @@ if(nid!==oldId){u.id=nid;data.users[nid]=u;delete data.users[oldId];
   data.session.adminEditingUserId=nid}
 saveData(data);renderAdminEdit();showModal({title:"更新完了",big:"✅"})});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
-$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
-fillStaffPasswordField("editUpw", u.id);
-$("editUpw").value="";
+$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value="";$("editUpw").placeholder="(変更しない場合は空欄)";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -1652,8 +1650,8 @@ function installStaffDirectBindings() {
 
 function getStaffOpenTaskStats(userId) {
   const tasks = (data.tasks || []).filter(task => getTaskStaffUserId(task) === String(userId || ""));
-  const open = tasks.filter(task => task.status !== "螳御ｺ・" && task.status !== "繧ｭ繝｣繝ｳ繧ｻ繝ｫ");
-  const overdue = open.filter(task => task.status === "譛滄剞雜・℃");
+  const open = tasks.filter(task => task.status !== "完了" && task.status !== "キャンセル");
+  const overdue = open.filter(task => task.status === "期限超過");
   return { total: tasks.length, open: open.length, overdue: overdue.length };
 }
 
@@ -1662,7 +1660,7 @@ function getCurrentMonthReportCount(user) {
   const today = new Date();
   const y = String(today.getFullYear());
   const m = String(today.getMonth() + 1);
-  return filterReports(user.reports, y, m, "蜈ｨ縺ｦ").length;
+  return filterReports(user.reports, y, m, "全て").length;
 }
 
 function upsertDashboardMount(parent, id, beforeNode) {
@@ -1920,7 +1918,7 @@ function renderTodayReportPreview() {
           const report = entry.report;
           const workLabel = report.workType || "-";
           const timeLabel = `${report.startH || "--"}:${report.startM || "--"} - ${report.endH || "--"}:${report.endM || "--"}`;
-          const extra = report.workType === "蝨ｨ螳・" ? `${report.taskType || ""} ${report.manHours || ""}`.trim() : `交通費 ${report.transport || 0}`;
+          const extra = report.workType === "在宅" ? `${report.taskType || ""} ${report.manHours || ""}`.trim() : `交通費 ${report.transport || 0}`;
           return `
             <div class="dash-card">
               <div class="dash-label">${workLabel}</div>

@@ -1,4 +1,4 @@
-﻿/* === VIEWS (admin-specific) === */
+/* === VIEWS (admin-specific) === */
 const views={userAuth:_noop,userStamp:_noop,userHome:_noop,reportInput:_noop,reportConfirm:_noop,staffTaskList:_noop,adminAuth:$("adminAuth"),adminReportMgmt:$("adminReportMgmt"),adminReportDetail:$("adminReportDetail"),adminTaskList:$("adminTaskList"),adminDropdownEdit:$("adminDropdownEdit"),adminHome:$("adminHome"),adminEdit:$("adminEdit"),adminMonthCheck:$("adminMonthCheck")};
 
 const DEFAULT_BOOTSTRAP_STAFF = [
@@ -91,7 +91,8 @@ try{
   data.session.adminEditingUserId="";
   saveLocalOnly(data);
   _adminBtn.textContent="データ取得中...";
-  await Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 5000))]);
+  // 1.5秒で打ち切って先に画面遷移、続きはバックグラウンドで取得
+  Promise.race([forceSyncPull(), new Promise(r => setTimeout(r, 1500))]).catch(()=>{});
   location.hash="#admin-task-list";
 }catch(e){$("adminAuthErr").textContent="通信エラー";$("adminAuthErr").style.display="block";}
 finally{_adminBtn.classList.remove("loading");_adminBtn.textContent="ログイン";}
@@ -3410,19 +3411,10 @@ async function openStaffEdit(userId) {
   setStaffEditOverlayTitle("スタッフ情報編集");
   $("seId").value = u.id;
   $("sePw").value = "";
+  $("sePw").placeholder = "(変更しない場合は空欄)";
   $("seName").value = u.name || "";
   $("seType").value = u.userType || "学生";
   $("seRate").value = String(getUserHourlyRate(u.id));
-  try {
-    const pw = await fetchStaffPasswordForAdmin(u.id, true);
-    if (pw && pw.indexOf("sha256:") === 0) {
-      $("sePw").value = "";
-      $("sePw").placeholder = "(暗号化済み - 新しいPWを入力してください)";
-    } else {
-      $("sePw").value = pw || "";
-      $("sePw").placeholder = "";
-    }
-  } catch (_error) {}
   $("staffEditOverlay").style.display = "flex";
 }
 $("staffEditClose").addEventListener("click", () => { $("staffEditOverlay").style.display = "none"; });
@@ -3518,119 +3510,6 @@ renderDropdownEdit();
 showModal({ title: "更新完了", sub: `${u.name || u.id}`, big: "✅" });
 });
 
-/* function installStaffEditSaveOverride() {
-  const oldBtn = $("staffEditSave");
-  if (!oldBtn || oldBtn.dataset.overrideInstalled === "1") return;
-  const newBtn = oldBtn.cloneNode(true);
-  newBtn.dataset.overrideInstalled = "1";
-  oldBtn.parentNode.replaceChild(newBtn, oldBtn);
-  newBtn.addEventListener("click", async () => {
-    const isCreate = _staffEditMode === "create";
-    const oldId = _staffEditId;
-    const existingUser = !isCreate && oldId ? data.users[oldId] : null;
-    if (!isCreate && !existingUser) return;
-
-    const newId = $("seId").value.trim();
-    const newPw = $("sePw").value.trim();
-    const newName = $("seName").value.trim();
-    const newType = $("seType").value;
-    const newRate = parseInt($("seRate").value, 10);
-
-    if (!newId) { showModal({ title: "ID縺ｯ蠢・医〒縺・, big: "笞・・ }); return; }
-    if ((isCreate || newId !== oldId) && data.users[newId]) { showModal({ title: "ID縺碁㍾隍・＠縺ｦ縺・∪縺・, big: "ｧｩ" }); return; }
-    if (!API_URL) { showModal({title:"API譛ｪ謗･邯・,sub:"笞吶〒URL繧定ｨｭ螳壹＠縺ｦ縺上□縺輔＞",big:"伯"}); return; }
-    if (!newPw && isCreate) { showModal({ title: "PW縺ｯ蠢・医〒縺・, big: "笞・・ }); return; }
-
-    try {
-      const resp = await fetch(API_URL, {
-        method: "POST",
-        headers: {"Content-Type": "text/plain"},
-        body: JSON.stringify({
-          _action: "upsertStaffUser",
-          token: getToken(),
-          id: newId,
-          pw: newPw || (existingUser && existingUser.pw) || "",
-          name: newName || newId,
-          userType: newType
-        }),
-        redirect: "follow"
-      });
-      const r = await resp.json();
-      applySyncMeta(syncMetaFromResult(r));
-  if (!r.ok) {
-    showModal({title: "繧ｨ繝ｩ繝ｼ", sub: r.error, big: "圻"});
-    return;
-  }
-  invalidateStaffAccountsCache();
-
-      if (!isCreate && newId !== oldId) {
-        const delResp = await fetch(API_URL, {
-          method: "POST",
-          headers: {"Content-Type": "text/plain"},
-          body: JSON.stringify({
-            _action: "deleteStaffUser",
-            token: getToken(),
-            id: oldId
-          }),
-          redirect: "follow"
-        });
-        const delResult = await delResp.json();
-        applySyncMeta(syncMetaFromResult(delResult));
-        if (!delResult.ok) {
-          showModal({title: "譌ｧID蜑企勁螟ｱ謨・, sub: delResult.error || "繧ｨ繝ｩ繝ｼ", big: "圻"});
-          return;
-        }
-      }
-    } catch (e) {
-      showModal({title: "騾壻ｿ｡繧ｨ繝ｩ繝ｼ", big: "藤"});
-      return;
-    }
-
-    const targetUser = isCreate ? {} : existingUser;
-    targetUser.id = newId;
-    targetUser.name = newName || newId;
-    targetUser.userType = newType;
-    targetUser.createdAt = targetUser.createdAt || Date.now();
-
-    data.users = data.users || {};
-    data.userHourlyRates = data.userHourlyRates || {};
-    data.users[newId] = targetUser;
-    if (!isNaN(newRate) && newRate >= 0) data.userHourlyRates[newId] = newRate;
-
-    if (!isCreate && newId !== oldId) {
-      delete data.users[oldId];
-      if (data.userHourlyRates && data.userHourlyRates[oldId] != null) {
-        if (data.userHourlyRates[newId] == null) data.userHourlyRates[newId] = data.userHourlyRates[oldId];
-        delete data.userHourlyRates[oldId];
-      }
-    }
-
-    if (latestStaffSyncMeta) {
-      updateSyncedBaseline(baseline => {
-        baseline.users = baseline.users || {};
-        const baselineSource = (!isCreate && oldId && baseline.users[oldId]) || baseline.users[newId] || {};
-        baseline.users[newId] = Object.assign({}, baselineSource, {
-          id: newId,
-          name: targetUser.name || newId,
-          userType: targetUser.userType || ""
-        });
-        if (targetUser.createdAt != null) baseline.users[newId].createdAt = targetUser.createdAt;
-        if (!isCreate && newId !== oldId) delete baseline.users[oldId];
-      }, latestStaffSyncMeta);
-    }
-
-    _staffEditId = newId;
-    _staffEditMode = "edit";
-    setStaffEditOverlayTitle("スタッフ情報編集");
-    saveData(data);
-    $("staffEditOverlay").style.display = "none";
-    renderDropdownEdit();
-    showModal({ title: isCreate ? "スタッフ追加完了" : "譖ｴ譁ｰ螳御ｺ・, sub: `${targetUser.name || targetUser.id}`, big: "笨・ });
-  });
-}
-
-installStaffEditSaveOverride(); */
-
 function installStaffEditSaveOverride() {
   const oldBtn = $("staffEditSave");
   if (!oldBtn || oldBtn.dataset.overrideInstalled === "1") return;
@@ -3656,15 +3535,7 @@ function installStaffEditSaveOverride() {
     let latestStaffSyncMeta = null;
 
     if (!passwordForSave && isCreate) { showModal({ title: "PW is required", big: "NG" }); return; }
-    if (!passwordForSave && !isCreate) {
-      try {
-        passwordForSave = await fetchStaffPasswordForAdmin(oldId, true);
-      } catch (_error) {}
-      if (!passwordForSave) {
-        showModal({ title: "PW is required", sub: "Current password could not be loaded", big: "NG" });
-        return;
-      }
-    }
+    // 編集時に空欄ならサーバー側で既存PWハッシュを保持する（平文PWは取得不可）
 
     try {
       const resp = await fetch(API_URL, {
@@ -4299,17 +4170,8 @@ renderAdminEdit = function() {
   $("editUname").value = u.name || "";
   $("editUpw").value = "";
   $("editUserType").value = u.userType || "";
-  fetchStaffPasswordForAdmin(u.id).then(pw => {
-    const el = $("editUpw");
-    if (!el) return;
-    if (pw && pw.indexOf("sha256:") === 0) {
-      el.value = "";
-      el.placeholder = "(暗号化済み - 管理者が新しいPWを設定してください)";
-    } else {
-      el.value = pw || "";
-      el.placeholder = "";
-    }
-  }).catch(() => {});
+  // PWはサーバーから取得しない（空欄=現状維持）
+  $("editUpw").placeholder = "(変更しない場合は空欄)";
 
   const now = new Date();
   const total = countTotal(u);
@@ -4478,11 +4340,11 @@ function getAdminOverviewStats() {
   const tasks = data.tasks || [];
   const today = ymd(new Date());
   return {
-    staffCount: Object.values(data.users || {}).filter(u => u && (u.userType || "") !== "遉ｾ莨壻ｺｺ").length,
+    staffCount: Object.values(data.users || {}).filter(u => u && (u.userType || "") !== "社会人").length,
     pendingStamp: countPendingStampRequests(),
-    overdueTasks: tasks.filter(task => task.status === "譛滄剞雜・℃").length,
-    workingTasks: tasks.filter(task => task.status === "萓晞ｼ蜑・" || task.status === "萓晞ｼ荳ｭ").length,
-    completedToday: tasks.filter(task => task.status === "螳御ｺ・" && task.completionDate === today).length
+    overdueTasks: tasks.filter(task => task.status === "期限超過").length,
+    workingTasks: tasks.filter(task => task.status === "依頼前" || task.status === "依頼中").length,
+    completedToday: tasks.filter(task => task.status === "完了" && task.completionDate === today).length
   };
 }
 
@@ -4644,7 +4506,7 @@ function renderAdminOverviewDashboard() {
       } else if (action === "overdue-task") {
         location.hash = "#admin-task-list";
         setTimeout(() => {
-          if ($("atlStatus")) $("atlStatus").value = "譛滄剞雜・℃";
+          if ($("atlStatus")) $("atlStatus").value = "期限超過";
           if (typeof doRenderATL === "function") doRenderATL();
         }, 120);
       } else if (action === "report-mgmt") {
@@ -5495,4 +5357,5 @@ renderMonthCheck = function() {
 };
 
 route();
+
 
