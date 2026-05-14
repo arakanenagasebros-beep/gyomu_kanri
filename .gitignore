@@ -1,0 +1,20 @@
+# 秘密情報・ローカル設定
+.clasp.json
+.clasprc.json
+*.local
+*.secret.*
+secrets/
+.env
+.env.*
+
+# ビルド・OS生成物
+.DS_Store
+Thumbs.db
+node_modules/
+
+# clasp ローカル
+.clasp.json.bak
+
+# 個人作業ファイル
+test_URL/
+*.xlsx.bak

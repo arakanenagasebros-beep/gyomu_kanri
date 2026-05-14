@@ -612,9 +612,7 @@ showModal({title:"更新完了",big:"✅"});
 function renderAdminEdit(){const u=data.users[data.session.adminEditingUserId];if(!u){location.hash="#admin";return}
   ensureUserShape(u);
   u.stamps = u.stamps || {};                        
-$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value=u.pw||"";$("editUserType").value=u.userType||"学生";
-fillStaffPasswordField("editUpw", u.id);
-$("editUpw").value="";
+$("editUserName").textContent=u.name||u.id;$("editUserId").textContent=u.id;$("editUid").value=u.id;$("editUname").value=u.name||"";$("editUpw").value="";$("editUpw").placeholder="(変更しない場合は空欄)";$("editUserType").value=u.userType||"学生";
 const now=new Date();const total=countTotal(u);$("eTotal").textContent=total;$("eMonth").textContent=countThisMonth(u,now);$("eWeek").textContent=countThisWeek(u,now);$("eMonthKey").textContent=ym(editMonthCursor);
 const sInc=calcStampIncentive(total);$("incentiveDisplay").innerHTML=`<div class="incentive-box"><div class="ib-title">💰 ｲﾝｾﾝﾃｨﾌﾞ（自動）</div><div style="font-family:var(--font-display);font-size:20px;font-weight:900;color:var(--pink);">${sInc.toLocaleString()}円</div><div style="font-size:11px;color:var(--muted);margin-top:4px;">累計${total}pt</div></div>`;
 $("editMonthLabel").textContent=monthLabelJa(editMonthCursor);
@@ -809,6 +807,114 @@ function appendAdminCompleteButton(container,t){
   container.appendChild(completeBtn);
 }
 
+function getPendingWorkTypeChangeRequest(t) {
+  const req = t && t.workTypeChangeRequest;
+  return req && req.status === "pending" && req.requestedWorkType && req.requestedWorkType !== t.workType ? req : null;
+}
+
+function renderTaskWorkTypeCell(t, isAdmin) {
+  const td = document.createElement("td");
+  const current = t.workType || "";
+  const pending = getPendingWorkTypeChangeRequest(t);
+  const req = t.workTypeChangeRequest || null;
+  const label = document.createElement("div");
+  label.textContent = current || "-";
+  label.style.fontWeight = "900";
+  td.appendChild(label);
+
+  if (pending) {
+    const note = document.createElement("div");
+    note.style.cssText = "font-size:10px;color:var(--orange);margin-top:3px;";
+    note.textContent = `変更申請: ${pending.currentWorkType || current} → ${pending.requestedWorkType}`;
+    td.appendChild(note);
+    if (isAdmin) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;";
+      const approve = document.createElement("button");
+      approve.className = "btn success small";
+      approve.textContent = "許可";
+      approve.addEventListener("click", event => {
+        event.stopPropagation();
+        if (isLockedMonth(t.requestDate)) {
+          showModal({ title: "確定済みの月です", sub: `${getMonthLockKey(t.requestDate)} は編集できません`, big: "NG" });
+          return;
+        }
+        if (!confirm(`業務形態を「${pending.requestedWorkType}」に変更しますか？`)) return;
+        t.workType = pending.requestedWorkType;
+        t.workTypeChangeRequest = {
+          status: "approved",
+          currentWorkType: pending.currentWorkType || current,
+          requestedWorkType: pending.requestedWorkType,
+          requestedAt: pending.requestedAt || Date.now(),
+          requestedBy: pending.requestedBy || "",
+          resolvedAt: Date.now()
+        };
+        saveData(data);
+        renderAdminTaskList();
+        showModal({ title: "変更を許可しました", sub: "業務形態を更新しました。", big: "✅" });
+      });
+      const reject = document.createElement("button");
+      reject.className = "btn danger small";
+      reject.textContent = "却下";
+      reject.addEventListener("click", event => {
+        event.stopPropagation();
+        if (!confirm("この業務形態変更申請を却下しますか？")) return;
+        t.workTypeChangeRequest = {
+          status: "rejected",
+          currentWorkType: pending.currentWorkType || current,
+          requestedWorkType: pending.requestedWorkType,
+          requestedAt: pending.requestedAt || Date.now(),
+          requestedBy: pending.requestedBy || "",
+          resolvedAt: Date.now()
+        };
+        saveData(data);
+        renderAdminTaskList();
+        showModal({ title: "申請を却下しました", big: "↩️" });
+      });
+      wrap.appendChild(approve);
+      wrap.appendChild(reject);
+      td.appendChild(wrap);
+    }
+    return td;
+  }
+
+  if (!isAdmin) {
+    if (req && req.status === "approved") {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:10px;color:var(--mint);margin-top:3px;";
+      note.textContent = "変更承認済み";
+      td.appendChild(note);
+    } else if (req && req.status === "rejected") {
+      const note = document.createElement("div");
+      note.style.cssText = "font-size:10px;color:var(--red);margin-top:3px;";
+      note.textContent = "変更申請は却下されました";
+      td.appendChild(note);
+    }
+    const other = current === "出勤" ? "在宅" : "出勤";
+    const btn = document.createElement("button");
+    btn.className = "btn ghost small";
+    btn.type = "button";
+    btn.style.marginTop = "4px";
+    btn.textContent = `${other}へ変更申請`;
+    btn.addEventListener("click", event => {
+      event.stopPropagation();
+      if (!confirm(`業務形態を「${other}」へ変更申請しますか？`)) return;
+      t.workTypeChangeRequest = {
+        status: "pending",
+        currentWorkType: current,
+        requestedWorkType: other,
+        requestedAt: Date.now(),
+        requestedBy: data.session.userId || ""
+      };
+      saveData(data);
+      renderStaffTaskList();
+      showModal({ title: "変更申請を送りました", sub: "管理者の許可後に業務形態が変更されます。", big: "📨" });
+    });
+    td.appendChild(btn);
+  }
+  return td;
+}
+
 function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
   theadEl.innerHTML=`<tr><th>No</th><th>状況</th><th>形態</th><th>依頼日</th><th>期限日</th><th>完了日</th><th>ﾃｷｽﾄｺｰﾄﾞ</th><th>業務種類</th><th>工数</th><th>内容</th><th>担当社員</th><th>担当ｽﾀｯﾌ</th><th>備考</th><th>有効指摘</th><th>提出</th>${isAdmin?"<th>削除</th>":""}</tr>`;
   tbodyEl.innerHTML="";
@@ -821,7 +927,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
     // Status
     const tdSt=document.createElement("td");tdSt.innerHTML=`<span class="status-${escapeHtml(t.status)}">${escapeHtml(t.status)}</span>`;tr.appendChild(tdSt);
     // WorkType
-    tr.appendChild(mkTd(t.workType));
+    tr.appendChild(renderTaskWorkTypeCell(t, isAdmin));
     tr.appendChild(mkTd(t.requestDate||""));tr.appendChild(mkTd(t.deadline||""));tr.appendChild(mkTd(t.completionDate||""));
     tr.appendChild(mkTd((t.textCodes||[]).join(", ")));
     tr.appendChild(mkTd(t.taskType||""));
