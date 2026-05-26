@@ -18,8 +18,10 @@ const DEFAULT_STAMP_INCENTIVE_RULES = [
   { every: 50, amount: 5000 },
   { every: 250, amount: 40000 }
 ];
-let API_URL = DEFAULT_API_URL || localStorage.getItem(API_URL_KEY) || ""; 
-localStorage.setItem(API_URL_KEY, API_URL);
+// 優先順位: localStorage（UIで上書きされた値） > DEFAULT_API_URL（config.js）
+// UI から ⚙ で設定した URL を次回ロード時にも反映するため localStorage を先に見る
+let API_URL = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL || "";
+if (API_URL) localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
 function getToken(){ return sessionStorage.getItem(TOKEN_KEY) || ""; }

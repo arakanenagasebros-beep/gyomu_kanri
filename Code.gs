@@ -1,42 +1,44 @@
 var DATA_FILE_NAME = "業務管理アプリ_data.json";
 var FILES_FOLDER_NAME = "業務管理アプリ_files";
-var FILES_ROOT_FOLDER_ID = "1-eGu7Sti6TrcM-U8fBJgcr1OfwZmL1A8";
+// FILES_ROOT_FOLDER_ID は環境固有値のため Script Property "FILES_ROOT_FOLDER_ID"
+// にデプロイ毎に設定する。コード側のフォールバック用定数は空にしておく。
+var FILES_ROOT_FOLDER_ID = "";
 var COMPLETED_FILES_FOLDER_NAME = "完了済";
 
 var TOKEN_TTL_SECONDS = 6 * 60 * 60;
 var DATA_CACHE_TTL = 600;
 var DATA_CACHE_KEY = "DATA_JSON_V2";
-var DATA_CACHE_CHUNK = 90 * 1024;
+// CacheService の 1 値上限は 100KB だが、UTF-8 換算で日本語が含まれると
+// 文字数 < バイト数になり閾値超過の恐れがあるため安全側で 80KB に設定
+var DATA_CACHE_CHUNK = 80 * 1024;
 var LOGIN_RATE_LIMIT = 5;
 var LOGIN_RATE_WINDOW = 5 * 60;
 var PROP = PropertiesService.getScriptProperties();
 
-// 初期プロファイル（PW は含めない / GitHub 公開でも安全）
-// PW は管理者が UI / bootstrapAdmin で設定する
+// 初期プロファイル（テスト用のみ。本番スタッフは Script Property
+// "STAFF_ACCOUNTS_JSON" に格納されており、コード公開時に PII が出ない。
+// 新規環境では管理画面 UI の「スタッフ追加」（upsertStaffUser アクション）から登録する）
 var DEFAULT_STAFF_PROFILES = {
   shakai_test: { name: "テスト社会人", userType: "社会人" },
-  ogasawara: { name: "小笠原", userType: "社会人" },
-  morotomi: { name: "諸富", userType: "社会人" },
-  osawa: { name: "大澤", userType: "社会人" },
-  yoneoka: { name: "米岡", userType: "社会人" },
-  hosaka: { name: "保坂", userType: "社会人" },
-  gakusei_test: { name: "テスト学生", userType: "学生" },
-  miko: { name: "神子", userType: "学生" },
-  shirakawa: { name: "白川", userType: "学生" },
-  matsumoto: { name: "松本", userType: "学生" },
-  mizutani: { name: "水谷", userType: "学生" },
-  takeuchi: { name: "竹内", userType: "学生" },
-  fujikawa: { name: "藤川", userType: "学生" },
-  kobayashi: { name: "小林", userType: "学生" }
+  gakusei_test: { name: "テスト学生", userType: "学生" }
 };
 var DEFAULT_USER_HOURLY_RATES = {
-  shakai_test: 1300, ogasawara: 1300, morotomi: 1300, osawa: 1300, yoneoka: 1300,
-  hosaka: 1300, gakusei_test: 1300, miko: 1300, shirakawa: 1300, matsumoto: 1300,
-  mizutani: 1300, takeuchi: 1300, fujikawa: 1300, kobayashi: 1300
+  shakai_test: 1300,
+  gakusei_test: 1300
 };
 var DEFAULT_DAILY_PASSWORDS_LEN = 34;
 
 // ====== 一回だけ実行する初期化系 ======
+// GAS エディタから一度だけ実行：Drive ルートフォルダ ID を設定
+// 既存環境からの移行：旧 FILES_ROOT_FOLDER_ID の値をここに渡す
+function bootstrapFilesRootFolderId(folderId) {
+  if (!folderId) throw new Error("usage: bootstrapFilesRootFolderId(folderId)");
+  // 検証：実在するフォルダか
+  var folder = DriveApp.getFolderById(String(folderId));
+  PROP.setProperty("FILES_ROOT_FOLDER_ID", folder.getId());
+  PROP.setProperty("FILES_FOLDER_ID", folder.getId());
+  Logger.log("ルートフォルダを設定しました: " + folder.getName() + " (" + folder.getId() + ")");
+}
 // GAS エディタから一度だけ実行：管理者の ID/PW を設定
 function bootstrapAdmin(newId, newPw) {
   if (!newId || !newPw) throw new Error("usage: bootstrapAdmin(id, pw)");
@@ -145,6 +147,14 @@ function hashPassword_(salt, pw) {
 function makePasswordRecord_(pw) {
   var salt = Utilities.getUuid();
   return { salt: salt, pwHash: hashPassword_(salt, pw) };
+}
+// パスワードポリシー: 8 文字以上 / 制御文字を含まない
+var PASSWORD_MIN_LENGTH = 8;
+function validatePasswordStrength_(pw) {
+  var s = String(pw == null ? "" : pw);
+  if (s.length < PASSWORD_MIN_LENGTH) return { ok: false, error: "password_too_short" };
+  if (/[\x00-\x1f\x7f]/.test(s)) return { ok: false, error: "password_invalid_chars" };
+  return { ok: true };
 }
 function verifyPasswordRecord_(rec, pw) {
   if (!rec) return false;
@@ -427,22 +437,41 @@ function getTodayPassword_() {
 
 // ====== Drive フォルダ ======
 function getFilesFolder_() {
+  // 1) Script Property: FILES_ROOT_FOLDER_ID（環境ごとに設定推奨）
+  var rootIdProp = PROP.getProperty("FILES_ROOT_FOLDER_ID");
+  if (rootIdProp) {
+    try {
+      var rootByProp = DriveApp.getFolderById(rootIdProp);
+      PROP.setProperty("FILES_FOLDER_ID", rootByProp.getId());
+      return rootByProp;
+    } catch (e0) {}
+  }
+  // 2) コード側フォールバック（通常は空）
   if (FILES_ROOT_FOLDER_ID) {
     try {
       var root = DriveApp.getFolderById(FILES_ROOT_FOLDER_ID);
       PROP.setProperty("FILES_FOLDER_ID", root.getId());
       return root;
-    } catch (e0) {}
+    } catch (e1) {}
   }
+  // 3) 既に作成済みのフォルダ
   var folderId = PROP.getProperty("FILES_FOLDER_ID");
   if (folderId) { try { return DriveApp.getFolderById(folderId); } catch (e) {} }
+  // 4) 新規作成
   var folders = DriveApp.getFoldersByName(FILES_FOLDER_NAME);
   var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(FILES_FOLDER_NAME);
   PROP.setProperty("FILES_FOLDER_ID", folder.getId());
   return folder;
 }
 function safeDriveFolderName_(name) {
-  return String(name || "").replace(/[\\/:*?"<>|]/g, "_").trim() || "未指定";
+  var s = String(name == null ? "" : name);
+  // 制御文字 + Windows/Drive 危険文字
+  s = s.replace(/[\x00-\x1f\x7f\\/:*?"<>|]/g, "_");
+  // 前後の空白・ドット（Drive は末尾ドットを落とすため自前で除去）
+  s = s.replace(/^[\s.]+|[\s.]+$/g, "").trim();
+  // Drive のファイル名は最大 255 バイト前後。日本語 3 バイトを考慮し 80 文字で切る
+  if (s.length > 80) s = s.slice(0, 80);
+  return s || "未指定";
 }
 function getOrCreateChildFolder_(parent, name) {
   var safeName = safeDriveFolderName_(name);
@@ -602,25 +631,30 @@ function mergeStaffAccountsIntoData_(data) {
   return next;
 }
 
+// 機密フィールドを除いた新しいオブジェクトを返す（元データは変更しない）
 function stripSensitiveFromData_(data) {
-  var next = data || {};
-  next.users = next.users || {};
-  Object.keys(next.users).forEach(function(uid) {
-    var u = next.users[uid];
-    if (!u) return;
-    if (Object.prototype.hasOwnProperty.call(u, "pw")) delete u.pw;
-    if (Object.prototype.hasOwnProperty.call(u, "pwHash")) delete u.pwHash;
-    if (Object.prototype.hasOwnProperty.call(u, "salt")) delete u.salt;
+  var src = data || {};
+  var users = src.users || {};
+  var cleanedUsers = {};
+  Object.keys(users).forEach(function(uid) {
+    var u = users[uid];
+    if (!u || typeof u !== "object") { cleanedUsers[uid] = u; return; }
+    var copy = {};
+    Object.keys(u).forEach(function(k) {
+      if (k === "pw" || k === "pwHash" || k === "salt") return;
+      copy[k] = u[k];
+    });
+    cleanedUsers[uid] = copy;
   });
-  return next;
+  return Object.assign({}, src, { users: cleanedUsers });
 }
 
 function writeData_(data) {
   var file = getDataFile_();
-  stripSensitiveFromData_(data);
   data._version = (data._version || 0) + 1;
   data._updatedAt = new Date().toISOString();
-  var json = JSON.stringify(data);
+  var clean = stripSensitiveFromData_(data);
+  var json = JSON.stringify(clean);
   file.setContent(json);
   PROP.setProperty("DATA_VERSION", String(data._version));
   PROP.setProperty("DATA_UPDATED_AT", data._updatedAt);
@@ -630,8 +664,23 @@ function writeData_(data) {
 
 function withLock_(callback) {
   var lock = LockService.getScriptLock();
-  try { lock.waitLock(10000); return callback(); }
-  finally { lock.releaseLock(); }
+  var acquired = false;
+  try {
+    try {
+      lock.waitLock(20000);
+      acquired = true;
+    } catch (lockErr) {
+      // 取得失敗：クライアントが識別できるエラーコードで返す
+      var e = new Error("lock_busy");
+      e.code = "lock_busy";
+      throw e;
+    }
+    return callback();
+  } finally {
+    if (acquired) {
+      try { lock.releaseLock(); } catch (_) {}
+    }
+  }
 }
 function out_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -840,12 +889,20 @@ function doPost(e) {
       var gateAdmin = requireAdmin_(e);
       if (!gateAdmin.ok) return out_(gateAdmin);
       var oldRec = getAdminCredsRecord_();
+      var adminPwRateKey = (oldRec && oldRec.id) ? String(oldRec.id) : (gateAdmin.auth.adminId || "admin");
+      if (!checkLoginRateLimit_("pwchange_admin", adminPwRateKey)) {
+        return out_({ ok: false, error: "too_many_attempts" });
+      }
       if (!oldRec || !verifyPasswordRecord_(oldRec, String(body.oldPw || ""))) {
+        recordLoginFailure_("pwchange_admin", adminPwRateKey);
         return out_({ ok: false, error: "旧パスワードが違います" });
       }
+      clearLoginFailures_("pwchange_admin", adminPwRateKey);
       var nid = String(body.newId || "").trim();
       var npw = String(body.newPw || "").trim();
       if (!nid || !npw) return out_({ ok: false, error: "ID/PWは必須です" });
+      var adminPwCheck = validatePasswordStrength_(npw);
+      if (!adminPwCheck.ok) return out_({ ok: false, error: adminPwCheck.error });
       setAdminCredsHashed_(nid, npw);
       return out_({ ok: true });
     }
@@ -855,16 +912,23 @@ function doPost(e) {
       var currentPw = String(body.currentPw || "");
       var newPw = String(body.newPw || "").trim();
       if (!currentPw || !newPw) return out_({ ok: false, error: "current/new password required" });
+      var staffPwStrength = validatePasswordStrength_(newPw);
+      if (!staffPwStrength.ok) return out_({ ok: false, error: staffPwStrength.error });
       return out_(withLock_(function() {
         var dataPw = readData_();
         var pwCheck = checkBaseVersion_(body, dataPw);
         if (!pwCheck.ok) return pwCheck;
         var staffPw = getStaffAccounts_();
         var selfId = String(gate.auth.userId || "");
+        if (!checkLoginRateLimit_("pwchange_staff", selfId)) {
+          return { ok: false, error: "too_many_attempts" };
+        }
         var selfAcc = staffPw[selfId];
         if (!selfAcc || !verifyPasswordRecord_(selfAcc, currentPw)) {
+          recordLoginFailure_("pwchange_staff", selfId);
           return { ok: false, error: "current password mismatch" };
         }
+        clearLoginFailures_("pwchange_staff", selfId);
         var rec = makePasswordRecord_(newPw);
         delete selfAcc.pw;
         selfAcc.salt = rec.salt;
@@ -889,12 +953,52 @@ function doPost(e) {
       var spw = String(body.pw || "");
       var name = String(body.name || "").trim() || sid;
       var userType = String(body.userType || "学生").trim();
+      var oldId = String(body.oldId || "").trim();
       if (!sid) return out_({ ok: false, error: "id required" });
+      if (spw) {
+        var upsertPwStrength = validatePasswordStrength_(spw);
+        if (!upsertPwStrength.ok) return out_({ ok: false, error: upsertPwStrength.error });
+      }
       return out_(withLock_(function() {
         var data2 = readData_();
         var baseCheck2 = checkBaseVersion_(body, data2);
         if (!baseCheck2.ok) return baseCheck2;
         var staff2 = getStaffAccounts_();
+
+        // ID 変更（rename）: 旧 ID から新 ID へアカウント＋ユーザーデータを atomically 移行
+        var isRename = oldId && oldId !== sid;
+        if (isRename) {
+          if (!staff2[oldId]) return { ok: false, error: "old_id_not_found" };
+          if (staff2[sid]) return { ok: false, error: "new_id_already_exists" };
+          // staff accounts のキー移動（PW ハッシュも含めて引き継ぎ）
+          staff2[sid] = staff2[oldId];
+          delete staff2[oldId];
+          // users マップのキー移動（reports/stamps/pendingStampRequest 等を引き継ぐ）
+          data2.users = data2.users || {};
+          if (data2.users[oldId]) {
+            var migratedUser = data2.users[oldId];
+            migratedUser.id = sid;
+            data2.users[sid] = migratedUser;
+            delete data2.users[oldId];
+          }
+          // userHourlyRates のキー移動
+          data2.userHourlyRates = data2.userHourlyRates || {};
+          if (data2.userHourlyRates[oldId] != null) {
+            data2.userHourlyRates[sid] = data2.userHourlyRates[oldId];
+            delete data2.userHourlyRates[oldId];
+          }
+          // staffWorkStatus（id キーのもの）の移動
+          data2.staffWorkStatus = data2.staffWorkStatus || {};
+          if (data2.staffWorkStatus[oldId] != null) {
+            data2.staffWorkStatus[sid] = data2.staffWorkStatus[oldId];
+            delete data2.staffWorkStatus[oldId];
+          }
+          // tasks 内の staffUserId を更新（表示名 staff は name 変更時に追従しないので別途）
+          (data2.tasks || []).forEach(function(t) {
+            if (t && String(t.staffUserId || "") === oldId) t.staffUserId = sid;
+          });
+        }
+
         var old = staff2[sid] || {};
         var nextAcc = { name: name, userType: userType };
         if (spw) {
@@ -942,6 +1046,10 @@ function doPost(e) {
       var uploadTaskId = String(body.taskId || "");
       var uploadData = readData_();
       var uploadTask = uploadTaskId ? (uploadData.tasks || []).find(function(t) { return String(t.id) === uploadTaskId; }) : null;
+      // taskId が指定されているのに該当タスクが見つからない場合はエラー（孤立ファイル防止）
+      if (uploadTaskId && !uploadTask) {
+        return out_({ ok: false, error: "task_not_found" });
+      }
       if (gate.auth.role !== "admin") {
         if (!uploadTaskId) return out_({ ok: false, error: "taskId required" });
         if (!uploadTask || !isTaskAccessibleByAuth_(uploadTask, gate.auth, uploadData)) return out_({ ok: false, error: "forbidden" });
@@ -1301,6 +1409,9 @@ function doPost(e) {
 
     return out_({ ok: false, error: "unknown action" });
   } catch (err) {
-    return out_({ ok: false, error: err.message });
+    if (err && err.code === "lock_busy") {
+      return out_({ ok: false, error: "lock_busy", retryable: true });
+    }
+    return out_({ ok: false, error: (err && err.message) || "internal_error" });
   }
 }

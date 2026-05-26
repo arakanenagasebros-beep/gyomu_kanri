@@ -23,7 +23,17 @@ window.addEventListener("app-data-updated",route);
 
 /* === NAV === */
 // Nav helpers (staff only - admin refs safely ignored via _noop)
-function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
+// ログアウト時にスタンプ編集ドラフトを一掃（端末共有・名義切替時の混在防止）
+function clearStaffDraftsFromStorage_(){
+  try{
+    const prefix = "stampcard_stamp_edit_draft_v1:";
+    for(let i = localStorage.length - 1; i >= 0; i--){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(prefix) === 0) localStorage.removeItem(k);
+    }
+  }catch(_){}
+}
+function doLogout(){data.session.userId="";clearToken();clearStaffDraftsFromStorage_();saveLocalOnly(data);location.hash="#user-login"}
 function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
 $("stampLogout").addEventListener("click",doLogout);$("userLogout").addEventListener("click",doLogout);$("reportLogout").addEventListener("click",doLogout);$("confirmLogout").addEventListener("click",doLogout);$("stlLogout").addEventListener("click",doLogout);
 
@@ -34,7 +44,11 @@ const _loginBtn=$("btnUserLogin");_loginBtn.classList.add("loading");_loginBtn.t
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginStaff",id,pw}),redirect:"follow"});
   const result=await resp.json();
-  if(!result.ok){$("userAuthErr").textContent="ログインに失敗しました。";$("userAuthErr").style.display="block";return}
+  if(!result.ok){
+    const msg = result.error==="too_many_attempts"
+      ? "試行回数が多すぎます。しばらく時間を置いて再試行してください。"
+      : "ログインに失敗しました。";
+    $("userAuthErr").textContent=msg;$("userAuthErr").style.display="block";return}
   setToken(result.token);
   data.session.userId=result.user.id;
   data.users=data.users||{};
@@ -1841,8 +1855,17 @@ function setupStaffPasswordOverlay() {
       closeStaffPasswordChangeFlow();
       showModal({ title: "変更しました", sub: "次回ログインから新しいパスワードを使えます", big: "OK" });
     } catch (error) {
-      if (String(error && error.message || "") === "password_change_requires_gas_update") {
+      const code = String(error && error.message || "");
+      if (code === "password_change_requires_gas_update") {
         setStatus("GAS 側の更新が必要です。", "#ff4757");
+      } else if (code === "password_too_short") {
+        setStatus("新しいパスワードは 8 文字以上にしてください。", "#ff4757");
+      } else if (code === "password_invalid_chars") {
+        setStatus("パスワードに使用できない文字が含まれています。", "#ff4757");
+      } else if (code === "too_many_attempts") {
+        setStatus("試行回数が多すぎます。しばらく時間を置いて再試行してください。", "#ff4757");
+      } else if (code === "current password mismatch") {
+        setStatus("現在のパスワードが違います。", "#ff4757");
       } else {
         setStatus("パスワード変更に失敗しました。", "#ff4757");
         handleDirectActionError(error, "パスワード変更に失敗しました");

@@ -18,3 +18,14 @@ node_modules/
 # 個人作業ファイル
 test_URL/
 *.xlsx.bak
+
+# 本番データ・個人情報を含むファイル（git に絶対に上げない）
+業務管理アプリ_data.json
+過去json/
+業務管理表.xlsx
+Excel/
+業務追加テンプレート.files/
+
+# ローカル設定の上書き（API URL 等）
+config.local.js
+*.local.js

@@ -44,8 +44,18 @@ window.addEventListener("hashchange",route);
 window.addEventListener("app-data-updated",route);
 
 /* === NAV === */
+// ログアウト時に他人のドラフトが残らないよう一掃する（複数管理者で 1 端末を共有するケース対策）
+function clearAdminDraftsFromStorage_(){
+  try{
+    const prefixes = ["stampcard_admin_stamp_request_draft_v1:", "stampcard_admin_stamp_direct_draft_v1:"];
+    for(let i = localStorage.length - 1; i >= 0; i--){
+      const k = localStorage.key(i);
+      if(k && prefixes.some(p => k.indexOf(p) === 0)) localStorage.removeItem(k);
+    }
+  }catch(_){}
+}
 function doLogout(){data.session.userId="";clearToken();saveLocalOnly(data);location.hash="#user-login"}
-function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";saveLocalOnly(data);location.hash="#admin-login"}
+function doAdminLogout(){data.session.adminAuthed=false;clearToken();data.session.adminEditingUserId="";data.session.adminReportEditingUserId="";clearAdminDraftsFromStorage_();saveLocalOnly(data);location.hash="#admin-login"}
 $("adminLogout").addEventListener("click",doAdminLogout);$("armLogout").addEventListener("click",doAdminLogout);$("atlLogout").addEventListener("click",doAdminLogout);$("ddeLogout").addEventListener("click",doAdminLogout);
 
 async function bootstrapDefaultStaffIfNeeded(){
@@ -58,7 +68,11 @@ if(!API_URL){$("userAuthErr").textContent="API未接続です（⚙で設定）"
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginStaff",id,pw}),redirect:"follow"});
   const result=await resp.json();
-  if(!result.ok){$("userAuthErr").textContent="ログインに失敗しました。";$("userAuthErr").style.display="block";return}
+  if(!result.ok){
+    const msg = result.error==="too_many_attempts"
+      ? "試行回数が多すぎます。しばらく時間を置いて再試行してください。"
+      : "ログインに失敗しました。";
+    $("userAuthErr").textContent=msg;$("userAuthErr").style.display="block";return}
   setToken(result.token);
   data.session.userId=result.user.id;
   data.users=data.users||{};
@@ -85,7 +99,11 @@ const _adminBtn=$("btnAdminLogin");_adminBtn.classList.add("loading");_adminBtn.
 try{
   const resp=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({_action:"loginAdmin",id,pw}),redirect:"follow"});
   const result=await resp.json();
-  if(!result.ok){$("adminAuthErr").textContent="ログインに失敗しました。";$("adminAuthErr").style.display="block";return}
+  if(!result.ok){
+    const msg = result.error==="too_many_attempts"
+      ? "試行回数が多すぎます。しばらく時間を置いて再試行してください。"
+      : "ログインに失敗しました。";
+    $("adminAuthErr").textContent=msg;$("adminAuthErr").style.display="block";return}
   setToken(result.token);
   data.session.adminAuthed=true;
   data.session.adminEditingUserId="";
@@ -158,7 +176,7 @@ function renderProgress(el,total){
   const currentInc=calcStampIncentive(total);
   const nextInc=calcStampIncentive(nextTarget);
   const bonus=nextInc-currentInc;
-  el.innerHTML=`<div class="progress-wrap"><div class="progress-label"><span>次のｲﾝｾﾝﾃｨﾌﾞ ${nextMile}pt</span><span>あと <b>${nextMile-total}pt</b>（+${bonus.toLocaleString()}円）</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`}
+  el.innerHTML=`<div class="progress-wrap"><div class="progress-label"><span>次のｲﾝｾﾝﾃｨﾌﾞ ${nextTarget}pt</span><span>あと <b>${nextTarget-total}pt</b>（+${bonus.toLocaleString()}円）</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`}
 
 /* === USER CALENDAR === */
 let userMonthCursor=startOfMonth(new Date());
@@ -3463,6 +3481,7 @@ $("staffEditSave").addEventListener("click", async () => {
   // ★APIを叩いてGASの隠し金庫（プロパティ）にパスワードを保存する処理を追加
   try {
   const oldId = _staffEditId;
+  const isRename = newId !== oldId;
 
   const resp = await fetch(API_URL, {
     method: "POST",
@@ -3471,6 +3490,7 @@ $("staffEditSave").addEventListener("click", async () => {
       _action: "upsertStaffUser",
       token: getToken(),
       id: newId,
+      oldId: isRename ? oldId : "",
       pw: newPw,
       name: newName||newId,
       userType: newType
@@ -3482,26 +3502,6 @@ $("staffEditSave").addEventListener("click", async () => {
   if (!r.ok) {
     showModal({title: "エラー", sub: r.error, big: "🚫"});
     return;
-  }
-
-  // ID変更時は旧IDもGAS側から削除
-  if (newId !== oldId) {
-    const delResp = await fetch(API_URL, {
-      method: "POST",
-      headers: {"Content-Type": "text/plain"},
-      body: JSON.stringify({
-        _action: "deleteStaffUser",
-        token: getToken(),
-        id: oldId
-      }),
-      redirect: "follow"
-    });
-    const delResult = await delResp.json();
-    applySyncMeta(syncMetaFromResult(delResult));
-    if (!delResult.ok) {
-      showModal({title: "旧ID削除失敗", sub: delResult.error || "エラー", big: "🚫"});
-      return;
-    }
   }
 } catch(e) {
   showModal({title: "通信エラー", big: "📡"});
@@ -3567,6 +3567,7 @@ function installStaffEditSaveOverride() {
     // 編集時に空欄ならサーバー側で既存PWハッシュを保持する（平文PWは取得不可）
 
     try {
+      const isRename = !isCreate && newId !== oldId;
       const resp = await fetch(API_URL, {
         method: "POST",
         headers: {"Content-Type": "text/plain"},
@@ -3574,6 +3575,7 @@ function installStaffEditSaveOverride() {
           _action: "upsertStaffUser",
           token: getToken(),
           id: newId,
+          oldId: isRename ? oldId : "",
           pw: passwordForSave,
           name: newName || newId,
           userType: newType
@@ -3588,26 +3590,6 @@ function installStaffEditSaveOverride() {
         return;
       }
       invalidateStaffAccountsCache();
-
-      if (!isCreate && newId !== oldId) {
-        const delResp = await fetch(API_URL, {
-          method: "POST",
-          headers: {"Content-Type": "text/plain"},
-          body: JSON.stringify({
-            _action: "deleteStaffUser",
-            token: getToken(),
-            id: oldId
-          }),
-          redirect: "follow"
-        });
-        const delResult = await delResp.json();
-        latestStaffSyncMeta = syncMetaFromResult(delResult);
-        applySyncMeta(latestStaffSyncMeta);
-        if (!delResult.ok) {
-          showModal({ title: "Delete old ID failed", sub: delResult.error || "error", big: "NG" });
-          return;
-        }
-      }
     } catch (e) {
       showModal({ title: "Network error", big: "NG" });
       return;
@@ -3889,7 +3871,13 @@ $("adminCredSave").addEventListener("click", async function(){
     const r = await resp.json();
     applySyncMeta(syncMetaFromResult(r));
     if(!r.ok){
-      showModal({title:"更新失敗",sub:(r.error||"unauthorized"),big:"⚠️"});
+      const map = {
+        "too_many_attempts": "試行回数が多すぎます。しばらく時間を置いて再試行してください。",
+        "password_too_short": "新しいパスワードは 8 文字以上にしてください。",
+        "password_invalid_chars": "パスワードに使用できない文字が含まれています。"
+      };
+      const sub = map[r.error] || r.error || "unauthorized";
+      showModal({title:"更新失敗",sub:sub,big:"⚠️"});
       return;
     }
     showModal({title:"更新しました",sub:"次回ログインから新ID/PWです",big:"✅"});
