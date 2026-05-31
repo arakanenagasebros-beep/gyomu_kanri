@@ -912,7 +912,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
         tdSub.textContent="―";
       } else {
         if(t.fileNames&&t.fileNames.length){
-        const links=(t.fileIds&&t.fileIds.length)?t.fileNames.map((n,i)=>{const fid=t.fileIds[i];return fid?`<a href="#" class="fileLink" data-fileid="${fid}" data-filename="${escapeHtml(n)}">${escapeHtml(n)}</a>`:escapeHtml(n);}).join(", "):escapeHtml(t.fileNames.join(", "));
+        const links=(t.fileIds&&t.fileIds.length)?t.fileNames.map((n,i)=>{const fid=t.fileIds[i];return fid?`<a href="#" class="fileLink" data-fileid="${escapeHtml(fid)}" data-filename="${escapeHtml(n)}">${escapeHtml(n)}</a>`:escapeHtml(n);}).join(", "):escapeHtml(t.fileNames.join(", "));
         tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${links}</span>`;
         tdSub.querySelectorAll(".fileLink").forEach(a=>{a.addEventListener("click",e=>{e.preventDefault();downloadDriveFile(a.dataset.fileid,a.dataset.filename||"download")})})}
       }
@@ -998,17 +998,25 @@ dz.addEventListener("click",()=>$("fileInput").click());
 $("fileInput").addEventListener("change",e=>{if(e.target.files.length)handleFiles(e.target.files)});
 function handleFiles(files){if(!fileUploadTask)return;for(let i=0;i<files.length;i++){pendingFiles.push(files[i])}renderFileList()}
 $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return;
-  // Upload files to Drive if API is configured
-  for(var i=0;i<pendingFiles.length;i++){
-    var f=pendingFiles[i];
-    if(!fileUploadTask.fileNames)fileUploadTask.fileNames=[];
-    if(API_URL){
-      var result=await uploadFileToDrive(f, fileUploadTask.id, fileUploadMode);
-      if(result){fileUploadTask.fileNames.push(result.fileName);if(!fileUploadTask.fileIds)fileUploadTask.fileIds=[];fileUploadTask.fileIds.push(result.fileId);}
-      else{fileUploadTask.fileNames.push(f.name+"(アップロード失敗)");}
-    }else{fileUploadTask.fileNames.push(f.name);}
+  // Upload files to Drive in parallel; keep fileNames and fileIds aligned by skipping failures
+  const _btn = $("fileSubmitBtn"); const _origLabel = _btn.textContent; _btn.disabled = true; _btn.textContent = "アップロード中...";
+  try {
+    fileUploadTask.fileNames = fileUploadTask.fileNames || [];
+    fileUploadTask.fileIds = fileUploadTask.fileIds || [];
+    if (API_URL) {
+      const { successes, failures } = await uploadFilesParallel(pendingFiles, fileUploadTask.id, fileUploadMode);
+      successes.forEach(s => { fileUploadTask.fileNames.push(s.fileName); fileUploadTask.fileIds.push(s.fileId); });
+      if (failures.length) {
+        const failNames = failures.map(f => f.name).join(", ");
+        showModal({ title: "一部アップロード失敗", sub: failNames, big: "⚠️" });
+      }
+    } else {
+      pendingFiles.forEach(f => fileUploadTask.fileNames.push(f.name));
+    }
+    pendingFiles = [];
+  } finally {
+    _btn.disabled = false; _btn.textContent = _origLabel;
   }
-  pendingFiles=[];
   if(fileUploadMode==="admin-attach"){
     // Just attach files, don't change status
     saveData(data);$("fileOverlay").style.display="none";
@@ -1029,16 +1037,24 @@ $("fileSubmitBtn").addEventListener("click",async ()=>{if(!fileUploadTask)return
 $("fileSubmitDirectBtn").addEventListener("click",async ()=>{
   if(!fileUploadTask)return;
   const baseTask = data.tasks.find(x=>x.id===fileUploadTask.id) || fileUploadTask;
-  for(var i=0;i<pendingFiles.length;i++){
-    var f=pendingFiles[i];
-    if(!baseTask.fileNames)baseTask.fileNames=[];
-    if(API_URL){
-      var result=await uploadFileToDrive(f, baseTask.id, fileUploadMode);
-      if(result){baseTask.fileNames.push(result.fileName);if(!baseTask.fileIds)baseTask.fileIds=[];baseTask.fileIds.push(result.fileId);}
-      else{baseTask.fileNames.push(f.name);}
-    }else{baseTask.fileNames.push(f.name);}
+  const _btn = $("fileSubmitDirectBtn"); const _origLabel = _btn.textContent; _btn.disabled = true; _btn.textContent = "アップロード中...";
+  try {
+    baseTask.fileNames = baseTask.fileNames || [];
+    baseTask.fileIds = baseTask.fileIds || [];
+    if (API_URL) {
+      const { successes, failures } = await uploadFilesParallel(pendingFiles, baseTask.id, fileUploadMode);
+      successes.forEach(s => { baseTask.fileNames.push(s.fileName); baseTask.fileIds.push(s.fileId); });
+      if (failures.length) {
+        const failNames = failures.map(f => f.name).join(", ");
+        showModal({ title: "一部アップロード失敗", sub: failNames, big: "⚠️" });
+      }
+    } else {
+      pendingFiles.forEach(f => baseTask.fileNames.push(f.name));
+    }
+    pendingFiles = [];
+  } finally {
+    _btn.disabled = false; _btn.textContent = _origLabel;
   }
-  pendingFiles=[];
   if(fileUploadMode==="admin-attach"){
     // Close without doing anything extra
     saveData(data);$("fileOverlay").style.display="none";fileUploadTask=null;

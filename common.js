@@ -18,9 +18,27 @@ const DEFAULT_STAMP_INCENTIVE_RULES = [
   { every: 50, amount: 5000 },
   { every: 250, amount: 40000 }
 ];
+// API URL に許可するホスト名（Google Apps Script のみ）。これ以外は localStorage 経由でも拒否する
+const ALLOWED_API_HOSTS = ["script.google.com", "script.googleusercontent.com"];
+function isAllowedApiUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    return ALLOWED_API_HOSTS.indexOf(u.hostname) >= 0;
+  } catch (e) {
+    return false;
+  }
+}
 // 優先順位: localStorage（UIで上書きされた値） > DEFAULT_API_URL（config.js）
-// UI から ⚙ で設定した URL を次回ロード時にも反映するため localStorage を先に見る
+// UI から ⚙ で設定した URL を次回ロード時にも反映するため localStorage を先に見る。
+// 不正なホストの値が localStorage に残っていた場合は破棄して DEFAULT_API_URL にフォールバック
 let API_URL = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL || "";
+if (API_URL && !isAllowedApiUrl(API_URL)) {
+  console.warn("[common.js] API_URL is not on the allowed host; ignoring", API_URL);
+  localStorage.removeItem(API_URL_KEY);
+  API_URL = isAllowedApiUrl(DEFAULT_API_URL) ? DEFAULT_API_URL : "";
+}
 if (API_URL) localStorage.setItem(API_URL_KEY, API_URL);
 
 const TOKEN_KEY = "stampcard_api_token";
@@ -120,6 +138,11 @@ function setupApiModal() {
     var st = document.getElementById("apiSetupStatus");
     var url = inp.value.trim();
     if (!url) { st.textContent = "URLを入力してください"; st.style.color = "#ff4757"; return; }
+    if (!isAllowedApiUrl(url)) {
+      st.textContent = "許可されないURLです（script.google.com 系のみ）";
+      st.style.color = "#ff4757";
+      return;
+    }
     API_URL = url;
     localStorage.setItem(API_URL_KEY, API_URL);
     st.textContent = "接続テスト中..."; st.style.color = "#4d96ff";
@@ -489,6 +512,68 @@ async function uploadFileToDrive(file, taskId, uploadMode) {
     reader.readAsDataURL(file);
   });
 }
+/**
+ * 複数ファイルを並列アップロードし、成功/失敗を分けて返す。
+ * fileNames と fileIds の対応関係を必ず一致させ、失敗時にズレを起こさない。
+ * API_URL 未設定時はアップロードを試みず failures に積む。
+ * @returns { successes: [{fileName, fileId}], failures: [{name, reason}] }
+ */
+/**
+ * fetch をタイムアウト付き + 一時的失敗時の自動リトライでラップする。
+ * - AbortController で 30 秒のタイムアウトを強制
+ * - ネットワークエラーまたは 5xx のとき 1 回だけ即時リトライ
+ * - opaque/redirect で abort できない場合があるので、シグナルとタイマーは確実に開放
+ */
+async function fetchWithRetry(input, init, opts) {
+  const timeoutMs = (opts && opts.timeoutMs) || 30000;
+  const maxRetries = (opts && opts.maxRetries != null) ? opts.maxRetries : 1;
+  let lastError = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(input, Object.assign({ redirect: "follow" }, init || {}, { signal: controller.signal }));
+      clearTimeout(tid);
+      if (resp.status >= 500 && resp.status < 600 && attempt < maxRetries) {
+        lastError = new Error("server_" + resp.status);
+        continue;
+      }
+      return resp;
+    } catch (e) {
+      clearTimeout(tid);
+      lastError = e;
+      // AbortError or network error → 次の attempt へ
+      if (attempt >= maxRetries) throw e;
+    }
+  }
+  throw lastError || new Error("fetch_failed");
+}
+
+async function uploadFilesParallel(files, taskId, uploadMode) {
+  const list = Array.from(files || []);
+  if (!list.length) return { successes: [], failures: [] };
+  if (!API_URL) {
+    // API 未接続: アップロード不可。呼び出し側で fileNames だけ控える運用に任せる
+    return { successes: [], failures: list.map(f => ({ name: f.name, reason: "api_not_configured" })) };
+  }
+  const results = await Promise.all(list.map(async file => {
+    try {
+      const r = await uploadFileToDrive(file, taskId, uploadMode);
+      if (r && r.fileId) return { ok: true, fileName: r.fileName || file.name, fileId: r.fileId };
+      return { ok: false, name: file.name, reason: "upload_failed" };
+    } catch (e) {
+      return { ok: false, name: file.name, reason: (e && e.message) || "upload_failed" };
+    }
+  }));
+  const successes = [];
+  const failures = [];
+  results.forEach(r => {
+    if (r.ok) successes.push({ fileName: r.fileName, fileId: r.fileId });
+    else failures.push({ name: r.name, reason: r.reason });
+  });
+  return { successes, failures };
+}
+
 /* === END SYNC LAYER === */
 
 function applyRemoteSyncData(remoteData) {
@@ -518,12 +603,11 @@ async function processQueue() {
       token: getToken(),
       _baseVersion: _syncVersion
     });
-    const resp = await fetch(API_URL, {
+    const resp = await fetchWithRetry(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(body),
-      redirect: "follow"
-    });
+      body: JSON.stringify(body)
+    }, { timeoutMs: 30000, maxRetries: 1 });
     const result = await resp.json();
     if (result.ok) {
       actionQueue.shift();
@@ -563,7 +647,7 @@ async function syncPull() {
   _isSyncing = true;
   try {
     const url = API_URL + "?action=read&token=" + encodeURIComponent(getToken()) + "&_baseVersion=" + encodeURIComponent(_syncVersion || 0);
-    const resp = await fetch(url, { redirect: "follow" });
+    const resp = await fetchWithRetry(url, {}, { timeoutMs: 60000, maxRetries: 1 });
     const result = await resp.json();
     if (result.ok && result.unchanged) {
       _lastSyncTime = Date.now();
@@ -641,7 +725,19 @@ function saveData(d) {
   const deletedUids = Object.keys(oldUsers).filter(uid => !newUsers[uid]);
   if (deletedUids.length) nextQueue.push({ action: "updateMaster", payload: { deleteUserId: deletedUids }, retryCount: 0, nextAttemptAt: 0 });
 
-  actionQueue = nextQueue;
+  // updateMaster 系を 1 件にマージ（マスター複数同時編集時のラウンドトリップ削減）
+  // 各 payload はキーが排他的なので Object.assign で結合可能
+  const mergedMaster = {};
+  const finalQueue = [];
+  nextQueue.forEach(req => {
+    if (req.action === "updateMaster") Object.assign(mergedMaster, req.payload);
+    else finalQueue.push(req);
+  });
+  if (Object.keys(mergedMaster).length) {
+    finalQueue.push({ action: "updateMaster", payload: mergedMaster, retryCount: 0, nextAttemptAt: 0 });
+  }
+
+  actionQueue = finalQueue;
   persistActionQueue();
   processQueue();
 }
@@ -649,7 +745,7 @@ function saveData(d) {
 async function syncCheckVersion() {
   if (!API_URL || _isSyncing || isSending || actionQueue.length) return;
   try {
-    const resp = await fetch(API_URL + "?action=version&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const resp = await fetchWithRetry(API_URL + "?action=version&token=" + encodeURIComponent(getToken()), {}, { timeoutMs: 10000, maxRetries: 0 });
     const result = await resp.json();
     if (result.ok && (result.version || 0) > _syncVersion) {
       await syncPull();
@@ -665,7 +761,7 @@ async function forceSyncPull() {
   _isSyncing = true;
   try {
     // 強制取得は _baseVersion を渡さず常にフルデータを取る
-    const resp = await fetch(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), { redirect: "follow" });
+    const resp = await fetchWithRetry(API_URL + "?action=read&token=" + encodeURIComponent(getToken()), {}, { timeoutMs: 60000, maxRetries: 1 });
     const result = await resp.json();
     if (result.ok && result.data) {
       applyRemoteSyncData(result.data);
@@ -684,16 +780,15 @@ async function postDirectAction(action, payload) {
   if (!API_URL) throw new Error("API not configured");
   const token = getToken();
   if (!token) throw new Error("not logged in");
-  const resp = await fetch(API_URL, {
+  const resp = await fetchWithRetry(API_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
     body: JSON.stringify(Object.assign({
       _action: action,
       token,
       _baseVersion: _syncVersion
-    }, payload || {})),
-    redirect: "follow"
-  });
+    }, payload || {}))
+  }, { timeoutMs: 30000, maxRetries: 1 });
   const result = await resp.json();
   if (result && result.ok) {
     if (result.version != null) {
@@ -931,6 +1026,32 @@ async function setStampRemote(targetUserId, date, value, metaPatch) {
       }
     });
     return { ok: true, user, legacyFallback: true };
+  }
+}
+
+async function setStampBatchRemote(targetUserId, changes, metaPatch) {
+  // changes: { "YYYY-MM-DD": true|false|"emergency"|null, ... }
+  // null/"" は削除。1 リクエストで複数日まとめて反映する。
+  const safeChanges = {};
+  Object.keys(changes || {}).forEach(key => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+    safeChanges[key] = changes[key];
+  });
+  try {
+    const result = await postDirectAction("setStampBatch", { targetUserId, changes: safeChanges, metaPatch: metaPatch || null });
+    if (result.user) applyDirectUserSync(targetUserId, result.user, result);
+    return result;
+  } catch (error) {
+    if (!isUnsupportedDirectActionError(error)) throw error;
+    // 古いサーバー版のフォールバック: 1 日ずつ setStampRemote
+    let lastResult = null;
+    for (const key of Object.keys(safeChanges)) {
+      lastResult = await setStampRemote(targetUserId, key, safeChanges[key], null);
+    }
+    if (metaPatch && Object.keys(metaPatch).length) {
+      lastResult = await setStampMetaRemote(targetUserId, metaPatch);
+    }
+    return lastResult || { ok: true, legacyFallback: true };
   }
 }
 
