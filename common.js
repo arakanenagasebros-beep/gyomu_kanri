@@ -1547,7 +1547,7 @@ function autoWorkloadStatus(staffName){
 }
 
 /* Task sequence number */
-function nextSeqNum(workType){const existing=data.tasks.filter(t=>t.workType===workType);return existing.length+1}
+function nextSeqNum(){const nums=data.tasks.map(t=>parseInt(t.seqNum)||0);return nums.length?Math.max(...nums)+1:1}
 
 /* === MODAL === */
 function showModal(o){$("mTitle").textContent=o.title||"";$("mSub").textContent=o.sub||"";$("mBody").textContent=o.body||"";$("mBig").textContent=o.big||"🎉";$("mSmall").textContent=o.small||"";$("overlay").style.display="flex"}
