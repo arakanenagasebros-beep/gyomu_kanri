@@ -844,7 +844,7 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
     tr.appendChild(mkTd((t.textCodes||[]).join(", ")));
     tr.appendChild(mkTd(t.taskType||""));
     tr.appendChild(mkTd(t.manHours||0));
-    tr.appendChild(mkTd((t.content||"").substring(0,20)));tr.appendChild(mkTd(t.employee||""));tr.appendChild(mkTd(getTaskStaffLabel(t)||""));
+    const tdCont=document.createElement("td");tdCont.style.cssText="white-space:pre-wrap;word-break:break-all;max-width:200px;min-width:100px;font-size:11px;line-height:1.4;vertical-align:top;";tdCont.textContent=t.content||"";tr.appendChild(tdCont);tr.appendChild(mkTd(t.employee||""));tr.appendChild(mkTd(getTaskStaffLabel(t)||""));
     // Notes - editable for staff
     if(!isAdmin){
       const tdN=document.createElement("td");const inp=document.createElement("input");inp.type="text";inp.value=t.notes||"";inp.style.cssText="font-size:10px;padding:2px 4px;border-radius:6px;width:80px;";
@@ -950,18 +950,30 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
       }
     } else {
       // === STAFF side ===
-      if(t.status==="依頼中"||t.status==="期限超過"){
+      if(t.status==="依頼中"||t.status==="期限超過"||t.status==="依頼前"){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
-        // DL button for staff (only if admin attached files)
+        // DL button (if admin attached files)
         if(t.fileNames&&t.fileNames.length&&t.fileNames[0]!=="（ファイルなし）"){
           const dlBtn=document.createElement("button");dlBtn.className="btn primary small";dlBtn.textContent="📥 DL";
-          dlBtn.addEventListener("click",()=>{
-            downloadTaskFiles(t);
-          });wrap.appendChild(dlBtn);
+          dlBtn.addEventListener("click",()=>downloadTaskFiles(t));wrap.appendChild(dlBtn);
         }
-        // Submit button
-        const btn=document.createElement("button");btn.className="btn success small";btn.textContent="📎提出";
-        btn.addEventListener("click",()=>openFileUpload(t,"staff"));wrap.appendChild(btn);
+        if(t.workType==="出勤"){
+          // 出勤は完了ボタンで即完了
+          const btn=document.createElement("button");btn.className="btn success small";btn.textContent="✅ 完了";
+          btn.addEventListener("click",()=>{
+            if(!confirm("この業務を完了にしますか？"))return;
+            t.status="完了";
+            const today=ymd(new Date());
+            t.completionDate=t.completionDate||t.deadline||today;
+            saveData(data);renderStaffTaskList();
+            showModal({title:"完了しました",sub:t.content||"",big:"✅"});
+          });
+          wrap.appendChild(btn);
+        } else {
+          // 在宅等は提出ボタン（ファイルアップロード）
+          const btn=document.createElement("button");btn.className="btn success small";btn.textContent="📎提出";
+          btn.addEventListener("click",()=>openFileUpload(t,"staff"));wrap.appendChild(btn);
+        }
         tdSub.appendChild(wrap);
       } else if(t.status==="提出中"){
         const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="4px";wrap.style.flexWrap="wrap";
@@ -985,8 +997,6 @@ function renderTaskTable(theadEl,tbodyEl,tasks,isAdmin){
           showModal({title:"戻しました",sub:"ステータスを依頼中に戻しました。",big:"↩️"});
         });wrap.appendChild(cancelBtn);
         tdSub.appendChild(wrap);
-      } else if(t.status==="依頼前"){
-        tdSub.textContent="―";
       } else {
         if(t.fileNames&&t.fileNames.length){tdSub.innerHTML=`<span style="font-size:10px;color:var(--mint);">✅ ${escapeHtml(t.fileNames.join(", "))}</span>`}
       }
